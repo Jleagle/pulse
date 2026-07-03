@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Pulse - Stateless Google Health Dashboard to track sleep stages, heart metrics, and daily activity live and on-the-fly.">
+    <title>Pulse | Stateless Health Dashboard</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="logo-area">
+                <div class="logo-icon">
+                    <i data-lucide="activity" class="pulse-icon"></i>
+                </div>
+                <h2>Pulse</h2>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <button id="nav-btn-overview" class="nav-item active" onclick="switchTab('overview')">
+                    <i data-lucide="layout-dashboard"></i>
+                    <span>Overview</span>
+                </button>
+                <button id="nav-btn-sleep" class="nav-item" onclick="switchTab('sleep')">
+                    <i data-lucide="moon"></i>
+                    <span>Sleep Analysis</span>
+                </button>
+                <button id="nav-btn-heart" class="nav-item" onclick="switchTab('heart')">
+                    <i data-lucide="heart"></i>
+                    <span>Heart Health</span>
+                </button>
+                <button id="nav-btn-activity" class="nav-item" onclick="switchTab('activity')">
+                    <i data-lucide="footprints"></i>
+                    <span>Activity & Energy</span>
+                </button>
+                <button id="nav-btn-settings" class="nav-item" onclick="switchTab('settings')">
+                    <i data-lucide="settings"></i>
+                    <span>Settings</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="sync-status-wrapper">
+                    <div id="sync-indicator" class="status-dot disconnected"></div>
+                    <span id="sync-status-text">Disconnected</span>
+                </div>
+                <button id="btn-sidebar-sync" class="sync-btn-small" onclick="triggerRefresh()">
+                    <i data-lucide="refresh-cw" id="sidebar-sync-icon"></i> Live Refresh
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <header class="top-header">
+                <div class="header-title">
+                    <span class="date-today" id="header-date">Today</span>
+                    <h1 id="page-title">Dashboard Overview</h1>
+                </div>
+                <div class="user-badge" id="user-badge-container">
+                    <img id="avatar-img" class="avatar-img" src="" alt="Avatar" style="display: none; width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid var(--color-purple);">
+                    <div class="avatar" id="avatar-badge">G</div>
+                    <span id="user-name">Guest</span>
+                </div>
+            </header>
+
+            <!-- TAB: OVERVIEW -->
+            <section id="tab-overview" class="tab-pane active">
+                <!-- Welcome Hero Banner for Disconnected Users -->
+                <div id="welcome-hero" class="welcome-hero glass-panel" style="display: none;">
+                    <div class="hero-content">
+                        <div class="hero-badge">⚡ Pure Stateless SaaS Architecture</div>
+                        <h2>Track your Google Health metrics live on-the-fly.</h2>
+                        <p>Connect your Fitbit or Pixel Watch account to analyze sleep stages, resting heart rate, and activity recovery. Pulse processes your health data entirely in server memory—nothing is ever stored to disk or a database.</p>
+                        <div class="hero-actions">
+                            <button class="btn btn-google-hero" onclick="redirectToGoogle()">
+                                <svg class="google-logo" viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
+                                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                                </svg>
+                                <span>Connect Google Health</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stats-grid" id="overview-stats-grid">
+                    <!-- Sleep Card -->
+                    <div class="stat-card glass-panel card-purple">
+                        <div class="card-header">
+                            <span class="card-label">Last Night's Sleep</span>
+                            <i data-lucide="moon" class="icon-purple"></i>
+                        </div>
+                        <div class="card-value" id="overview-sleep-duration">--h --m</div>
+                        <div class="card-footer">
+                            <span id="overview-sleep-type">No sleep data recorded</span>
+                        </div>
+                    </div>
+                    <!-- RHR Card -->
+                    <div class="stat-card glass-panel card-rose">
+                        <div class="card-header">
+                            <span class="card-label">Resting Heart Rate</span>
+                            <i data-lucide="heart" class="icon-rose"></i>
+                        </div>
+                        <div class="card-value" id="overview-rhr">-- <span class="unit">BPM</span></div>
+                        <div class="card-footer">
+                            <span id="overview-rhr-change">Daily average RHR</span>
+                        </div>
+                    </div>
+                    <!-- HRV Card -->
+                    <div class="stat-card glass-panel card-blue">
+                        <div class="card-header">
+                            <span class="card-label">Heart Rate Variability</span>
+                            <i data-lucide="activity" class="icon-blue"></i>
+                        </div>
+                        <div class="card-value" id="overview-hrv">-- <span class="unit">ms</span></div>
+                        <div class="card-footer">
+                            <span id="overview-hrv-details">Daily average HRV</span>
+                        </div>
+                    </div>
+                    <!-- Activity Card -->
+                    <div class="stat-card glass-panel card-emerald">
+                        <div class="card-header">
+                            <span class="card-label">Daily Steps & Activity</span>
+                            <i data-lucide="footprints" class="icon-emerald"></i>
+                        </div>
+                        <div class="card-value" id="overview-steps">--,---</div>
+                        <div class="card-footer">
+                            <span id="overview-calories">-- kcal burned</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-charts-grid" id="overview-charts-grid">
+                    <!-- Sleep Trends Card -->
+                    <div class="chart-panel glass-panel">
+                        <div class="chart-header">
+                            <div>
+                                <h3>Sleep Duration Trend</h3>
+                                <p class="chart-subtitle">Total sleep period vs time asleep (Live API View)</p>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="chart-overview-sleep"></canvas>
+                        </div>
+                    </div>
+                    <!-- RHR & HRV Card -->
+                    <div class="chart-panel glass-panel">
+                        <div class="chart-header">
+                            <div>
+                                <h3>Heart Recovery Trend</h3>
+                                <p class="chart-subtitle">Resting Heart Rate (BPM) and HRV (ms)</p>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="chart-overview-heart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: SLEEP ANALYSIS -->
+            <section id="tab-sleep" class="tab-pane">
+                <div class="chart-panel glass-panel mb-6">
+                    <div class="chart-header">
+                        <div>
+                            <h3>Sleep Stages Breakdown</h3>
+                            <p class="chart-subtitle">Deep, REM, Light, and Awake durations over time</p>
+                        </div>
+                    </div>
+                    <div class="chart-container chart-tall">
+                        <canvas id="chart-sleep-stages"></canvas>
+                    </div>
+                </div>
+
+                <div class="table-panel glass-panel">
+                    <div class="table-header">
+                        <h3>Sleep History Log</h3>
+                        <span class="badge">Live Memory View</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table" id="sleep-history-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Bedtime</th>
+                                    <th>Wake Time</th>
+                                    <th>Total Sleep</th>
+                                    <th>Asleep</th>
+                                    <th>Awake</th>
+                                    <th>Type</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No records loaded. Connect Google Health to view live sleep logs.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: HEART HEALTH -->
+            <section id="tab-heart" class="tab-pane">
+                <div class="dashboard-charts-grid mb-6">
+                    <div class="chart-panel glass-panel">
+                        <div class="chart-header">
+                            <div>
+                                <h3>Heart Rate Variability (HRV)</h3>
+                                <p class="chart-subtitle">Higher HRV generally indicates better recovery</p>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="chart-hrv"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-panel glass-panel">
+                        <div class="chart-header">
+                            <div>
+                                <h3>Resting Heart Rate (RHR)</h3>
+                                <p class="chart-subtitle">Lower RHR indicates cardiovascular fitness</p>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="chart-rhr"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tables-split-grid">
+                    <div class="table-panel glass-panel">
+                        <div class="table-header">
+                            <h3>HRV History</h3>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="data-table" id="hrv-history-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Avg HRV</th>
+                                        <th>Deep Sleep RMSSD</th>
+                                        <th>Entropy</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="table-panel glass-panel">
+                        <div class="table-header">
+                            <h3>RHR History</h3>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="data-table" id="rhr-history-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Beats Per Minute</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td colspan="3" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: ACTIVITY & ENERGY -->
+            <section id="tab-activity" class="tab-pane">
+                <div class="dashboard-charts-grid mb-6">
+                    <div class="chart-panel glass-panel">
+                        <div class="chart-header">
+                            <div>
+                                <h3>Daily Steps</h3>
+                                <p class="chart-subtitle">Steps walked compared to 10,000 goal</p>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="chart-steps"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-panel glass-panel">
+                        <div class="chart-header">
+                            <div>
+                                <h3>Active Energy & Minutes</h3>
+                                <p class="chart-subtitle">Calories burned (kcal) and active duration</p>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="chart-calories"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-panel glass-panel">
+                    <div class="table-header">
+                        <h3>Daily Activity Log</h3>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table" id="activity-history-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Steps</th>
+                                    <th>Active Calories</th>
+                                    <th>Active Minutes</th>
+                                    <th>Goal Achieved</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: SETTINGS -->
+            <section id="tab-settings" class="tab-pane">
+                <div class="settings-grid">
+                    <!-- Hosted Environment Status -->
+                    <div class="settings-panel glass-panel">
+                        <div class="panel-header border-bottom">
+                            <h3>Hosted Environment Architecture</h3>
+                            <p class="panel-subtitle">This instance of Pulse is running in stateless SaaS mode.</p>
+                        </div>
+                        
+                        <div class="env-info-list" style="padding: 20px 0; display: flex; flex-direction: column; gap: 20px;">
+                            <div class="env-item" style="display: flex; gap: 16px; align-items: center;">
+                                <div class="env-icon" style="width: 44px; height: 44px; border-radius: 12px; background: rgba(192, 132, 252, 0.1); display: flex; align-items: center; justify-content: center;"><i data-lucide="cpu" class="icon-purple"></i></div>
+                                <div class="env-text" style="display: flex; flex-direction: column;">
+                                    <strong style="font-size: 0.95rem;">100% In-Memory Runtime Mode</strong>
+                                    <span style="font-size: 0.85rem; color: var(--text-secondary);">Live HTTP fetching directly from Google Health API.</span>
+                                </div>
+                            </div>
+                            <div class="env-item" style="display: flex; gap: 16px; align-items: center;">
+                                <div class="env-icon" style="width: 44px; height: 44px; border-radius: 12px; background: rgba(52, 211, 153, 0.1); display: flex; align-items: center; justify-content: center;"><i data-lucide="shield" class="icon-emerald"></i></div>
+                                <div class="env-text" style="display: flex; flex-direction: column;">
+                                    <strong style="font-size: 0.95rem;">Zero Storage Privacy Guarantee</strong>
+                                    <span style="font-size: 0.85rem; color: var(--text-secondary);">No metrics, sleep sessions, or heart data are ever saved to disk or database.</span>
+                                </div>
+                            </div>
+                            <div class="env-item" style="display: flex; gap: 16px; align-items: center;">
+                                <div class="env-icon" style="width: 44px; height: 44px; border-radius: 12px; background: rgba(56, 189, 248, 0.1); display: flex; align-items: center; justify-content: center;"><i data-lucide="key" class="icon-blue"></i></div>
+                                <div class="env-text" style="display: flex; flex-direction: column;">
+                                    <strong style="font-size: 0.95rem;">OAuth 2.0 Client Credentials</strong>
+                                    <span style="font-size: 0.85rem; color: var(--text-secondary);" id="oauth-config-status">Checking server configuration...</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="time-horizon-box border-top" style="padding-top: 20px; display: flex; flex-direction: column; gap: 12px;">
+                            <h4>Live Data Time Horizon</h4>
+                            <p class="panel-subtitle">Choose how many days of live metrics to fetch on each dashboard load.</p>
+                            <div class="horizon-selector" style="display: flex; gap: 12px; margin-top: 8px;">
+                                <button class="btn btn-secondary" onclick="setTimeHorizon(7)" id="horizon-7">7 Days</button>
+                                <button class="btn btn-primary" onclick="setTimeHorizon(14)" id="horizon-14">14 Days</button>
+                                <button class="btn btn-secondary" onclick="setTimeHorizon(30)" id="horizon-30">30 Days</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Integration State & Session Controls -->
+                    <div class="settings-panel glass-panel flex-column">
+                        <div class="panel-header border-bottom">
+                            <h3>Google Health Connection</h3>
+                        </div>
+
+                        <div class="connection-status-box">
+                            <div class="status-indicator-large">
+                                <i data-lucide="shield-check" class="success-icon" id="auth-status-icon"></i>
+                                <div class="status-info">
+                                    <h4 id="auth-status-title">Not Connected</h4>
+                                    <p id="auth-status-desc">Link your Google Account to begin fetching live health data.</p>
+                                </div>
+                            </div>
+                            
+                            <button id="btn-google-connect" class="btn btn-google" onclick="redirectToGoogle()" disabled>
+                                <svg class="google-logo" viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
+                                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                                </svg>
+                                <span>Connect Google Health</span>
+                            </button>
+                        </div>
+
+                        <div class="danger-zone-box">
+                            <h4>Session Management</h4>
+                            <p class="panel-subtitle">Manage your active browser session cookie.</p>
+                            
+                            <div class="control-row">
+                                <div class="control-desc">
+                                    <strong>Live API Refresh</strong>
+                                    <span>Query Google Health API for updated metrics right now.</span>
+                                </div>
+                                <button id="btn-force-sync" class="btn btn-secondary" onclick="triggerRefresh()" disabled>
+                                    <i data-lucide="refresh-cw"></i> Refresh Live
+                                </button>
+                            </div>
+
+                            <div class="control-row border-top">
+                                <div class="control-desc">
+                                    <strong>Sign Out & Disconnect</strong>
+                                    <span>Revoke session cookie and clear in-memory views.</span>
+                                </div>
+                                <button id="btn-purge-db" class="btn btn-danger" onclick="logout()" disabled>
+                                    <i data-lucide="log-out"></i> Sign Out
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
