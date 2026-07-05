@@ -1,0 +1,38 @@
+name: Go CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Verify Dependencies
+        run: go mod verify
+
+      - name: Check Formatting
+        run: |
+          if [ -n "$(gofmt -l .)" ]; then
+            echo "Go files are not formatted properly:"
+            gofmt -d .
+            exit 1
+          fi
+
+      - name: Vet Code
+        run: go vet ./...
+
+      - name: Run Tests
+        run: go test -v ./...
