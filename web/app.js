@@ -182,16 +182,28 @@ function switchTab(tabId, updateUrl = true) {
     if (true) {
         if (tabId === "sleep") {
             if (!appData.sleep_loaded && !appData.sleep_loading) loadMetric("sleep");
-            else if (appData.sleep_loaded) renderSleepCharts({ sleep_sessions: appData.sleep_sessions });
+            else if (appData.sleep_loaded) {
+                populateSleepTable(appData.sleep_sessions);
+                renderSleepCharts({ sleep_sessions: appData.sleep_sessions });
+            }
         } else if (tabId === "heart") {
             if (!appData.heart_loaded && !appData.heart_loading) loadMetric("heart");
-            else if (appData.heart_loaded) renderHeartCharts({ rhr_records: appData.rhr_records, hrv_records: appData.hrv_records });
+            else if (appData.heart_loaded) {
+                populateHeartTable(appData.rhr_records, appData.hrv_records);
+                renderHeartCharts({ rhr_records: appData.rhr_records, hrv_records: appData.hrv_records });
+            }
         } else if (tabId === "activity") {
             if (!appData.activity_loaded && !appData.activity_loading) loadMetric("activity");
-            else if (appData.activity_loaded) renderActivityCharts({ activity_records: appData.activity_records });
+            else if (appData.activity_loaded) {
+                populateActivityTable(appData.activity_records);
+                renderActivityCharts({ activity_records: appData.activity_records });
+            }
         } else if (tabId === "overview") {
-            if (!appData.overview_loaded) loadMetric("overview");
-            else renderOverviewCharts(appData);
+            if (!appData.overview_loaded && !appData.overview_loading) loadMetric("overview");
+            else if (appData.overview_loaded) {
+                populateOverviewCards(appData);
+                renderOverviewCharts(appData);
+            }
         }
     }
 }
@@ -333,7 +345,7 @@ async function loadStats(forceRefresh = false) {
     if (!forceRefresh && loadCache()) {
         const raw = localStorage.getItem("pulse_app_cache");
         const cacheAgeMin = raw ? Math.round((Date.now() - JSON.parse(raw).timestamp) / 60000) : 0;
-        showToast(`Loaded metrics from browser storage (${cacheAgeMin}m ago). Click Sync to fetch live from API.`);
+        // Suppress green success toast when loading from browser cache as requested by user
         
         if (appData.overview_loaded) {
             populateOverviewCards(appData);
@@ -358,10 +370,10 @@ async function loadStats(forceRefresh = false) {
         return;
     }
 
-    // Always load overview first to populate top cards
-    await loadMetric("overview");
-    if (activeTabId !== "overview" && activeTabId !== "settings") {
+    if (activeTabId !== "settings" && activeTabId !== "privacy-policy" && activeTabId !== "terms-of-service") {
         await loadMetric(activeTabId);
+    } else {
+        await loadMetric("overview");
     }
 }
 
@@ -391,31 +403,14 @@ async function loadMetric(metric, pageToken = "") {
 
         if (metric === "overview") {
             appData.overview_loaded = true;
-            populateOverviewCards(data);
-            renderOverviewCharts(data);
-            if (!appData.sleep_loaded) {
-                appData.sleep_sessions = data.sleep_sessions || [];
-                appData.sleep_next_page_token = data.sleep_next_page_token || "";
-                appData.sleep_loaded = true;
-                populateSleepTable(appData.sleep_sessions);
-                renderSleepCharts({ sleep_sessions: appData.sleep_sessions });
-            }
+            if (!appData.sleep_loaded) appData.sleep_sessions = data.sleep_sessions || [];
             if (!appData.heart_loaded) {
                 appData.rhr_records = data.rhr_records || [];
-                appData.rhr_next_page_token = data.rhr_next_page_token || "";
                 appData.hrv_records = data.hrv_records || [];
-                appData.hrv_next_page_token = data.hrv_next_page_token || "";
-                appData.heart_loaded = true;
-                populateHeartTable(appData.rhr_records, appData.hrv_records);
-                renderHeartCharts({ rhr_records: appData.rhr_records, hrv_records: appData.hrv_records });
             }
-            if (!appData.activity_loaded) {
-                appData.activity_records = data.activity_records || [];
-                appData.activity_next_page_token = data.activity_next_page_token || "";
-                appData.activity_loaded = true;
-                populateActivityTable(appData.activity_records);
-                renderActivityCharts({ activity_records: appData.activity_records });
-            }
+            if (!appData.activity_loaded) appData.activity_records = data.activity_records || [];
+            populateOverviewCards(appData);
+            renderOverviewCharts(appData);
         } else if (metric === "sleep") {
             if (pageToken) {
                 appData.sleep_sessions = appData.sleep_sessions.concat(data.sleep_sessions || []);
@@ -465,10 +460,63 @@ async function loadMetric(metric, pageToken = "") {
     }
 }
 
-function populateTables(data) {
-    populateSleepTable(data.sleep_sessions || []);
-    populateHeartTable(data.rhr_records || [], data.hrv_records || []);
-    populateActivityTable(data.activity_records || []);
+function populateOverviewCards(data) {
+    // Sleep Card
+    const sleepVal = document.getElementById("overview-sleep-duration");
+    const sleepSub = document.getElementById("overview-sleep-type");
+    if (data && data.sleep_sessions && data.sleep_sessions.length > 0) {
+        const lastSleep = data.sleep_sessions[0];
+        const hrs = Math.floor(lastSleep.duration_minutes / 60);
+        const mins = lastSleep.duration_minutes % 60;
+        if (sleepVal) sleepVal.textContent = `${hrs}h ${mins}m`;
+        
+        const sleepDate = new Date(lastSleep.start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        if (sleepSub) sleepSub.textContent = `Asleep ${lastSleep.minutes_asleep}m (${lastSleep.sleep_type} type) on ${sleepDate}`;
+    } else {
+        if (sleepVal) sleepVal.textContent = "--h --m";
+        if (sleepSub) sleepSub.textContent = "No sleep data recorded";
+    }
+
+    // RHR Card
+    const rhrVal = document.getElementById("overview-rhr");
+    const rhrSub = document.getElementById("overview-rhr-change");
+    if (data && data.rhr_records && data.rhr_records.length > 0) {
+        const latestRHR = data.rhr_records[0];
+        if (rhrVal) rhrVal.innerHTML = `${latestRHR.beats_per_minute} <span class="unit">BPM</span>`;
+        if (rhrSub) rhrSub.textContent = `Recorded on ${latestRHR.date}`;
+    } else {
+        if (rhrVal) rhrVal.innerHTML = `-- <span class="unit">BPM</span>`;
+        if (rhrSub) rhrSub.textContent = "No heart rate data";
+    }
+
+    // HRV Card
+    const hrvVal = document.getElementById("overview-hrv");
+    const hrvSub = document.getElementById("overview-hrv-details");
+    if (data && data.hrv_records && data.hrv_records.length > 0) {
+        const latestHRV = data.hrv_records[0];
+        if (hrvVal) hrvVal.innerHTML = `${Math.round(latestHRV.avg_hrv_ms)} <span class="unit">ms</span>`;
+        
+        let details = `Date: ${latestHRV.date}`;
+        if (latestHRV.deep_sleep_rmssd) {
+            details += ` | Deep Sleep RMSSD: ${Math.round(latestHRV.deep_sleep_rmssd)}ms`;
+        }
+        if (hrvSub) hrvSub.textContent = details;
+    } else {
+        if (hrvVal) hrvVal.innerHTML = `-- <span class="unit">ms</span>`;
+        if (hrvSub) hrvSub.textContent = "No HRV data";
+    }
+
+    // Steps Card
+    const stepsVal = document.getElementById("overview-steps");
+    const calVal = document.getElementById("overview-calories");
+    if (data && data.activity_records && data.activity_records.length > 0) {
+        const latestAct = data.activity_records[0];
+        if (stepsVal) stepsVal.textContent = latestAct.steps.toLocaleString();
+        if (calVal) calVal.textContent = `${latestAct.calories_burned} kcal | ${latestAct.active_minutes} active mins`;
+    } else {
+        if (stepsVal) stepsVal.textContent = "--,---";
+        if (calVal) calVal.textContent = "-- kcal burned";
+    }
 }
 
 function populateSleepTable(sessions) {
