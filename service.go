@@ -182,7 +182,7 @@ func (s *StatelessService) FetchUserProfile(client *http.Client) (*UserProfile, 
 
 // Fetch all health metrics concurrently and return stateless response
 func (s *StatelessService) FetchAllStats(client *http.Client, days int) (*StatsResponse, error) {
-	startTime := time.Now().AddDate(0, 0, -days)
+	startTime := time.Now().UTC().AddDate(0, 0, -days)
 	startTimeRFC := startTime.Format(time.RFC3339)
 	startDateStr := startTime.Format("2006-01-02")
 
@@ -229,16 +229,63 @@ func (s *StatelessService) FetchAllStats(client *http.Client, days int) (*StatsR
 	// Check if any critical API errors occurred
 	if errSleep != nil {
 		fmt.Printf("[Stateless Fetch] Sleep error: %v\n", errSleep)
+	} else {
+		fmt.Printf("[Stateless Fetch] Retrieved %d real sleep sessions from Google Health API\n", len(sleepSessions))
 	}
 	if errRHR != nil {
 		fmt.Printf("[Stateless Fetch] RHR error: %v\n", errRHR)
+	} else {
+		fmt.Printf("[Stateless Fetch] Retrieved %d real resting heart rate records from Google Health API\n", len(rhrRecords))
 	}
 	if errHRV != nil {
 		fmt.Printf("[Stateless Fetch] HRV error: %v\n", errHRV)
+	} else {
+		fmt.Printf("[Stateless Fetch] Retrieved %d real HRV records from Google Health API\n", len(hrvRecords))
 	}
 	if errAct != nil {
 		fmt.Printf("[Stateless Fetch] Activity error: %v\n", errAct)
+	} else {
+		fmt.Printf("[Stateless Fetch] Retrieved %d real activity records from Google Health API\n", len(activityRecs))
 	}
+
+	// Ensure slices are initialized so JSON serialization outputs [] instead of null
+	if sleepSessions == nil {
+		sleepSessions = make([]SleepSession, 0)
+	}
+	if rhrRecords == nil {
+		rhrRecords = make([]RHRRecord, 0)
+	}
+	if hrvRecords == nil {
+		hrvRecords = make([]HRVRecord, 0)
+	}
+	if activityRecs == nil {
+		activityRecs = make([]ActivityRecord, 0)
+	}
+
+	// Filter results in memory to ensure we retain valid records within the requested horizon
+	var filteredSleep []SleepSession
+	for _, s := range sleepSessions {
+		if s.StartTime >= startTimeRFC || s.EndTime >= startTimeRFC || s.StartTime == "" {
+			filteredSleep = append(filteredSleep, s)
+		}
+	}
+	sleepSessions = filteredSleep
+
+	var filteredRHR []RHRRecord
+	for _, r := range rhrRecords {
+		if r.Date >= startDateStr || r.Date == "" {
+			filteredRHR = append(filteredRHR, r)
+		}
+	}
+	rhrRecords = filteredRHR
+
+	var filteredHRV []HRVRecord
+	for _, h := range hrvRecords {
+		if h.Date >= startDateStr || h.Date == "" {
+			filteredHRV = append(filteredHRV, h)
+		}
+	}
+	hrvRecords = filteredHRV
 
 	// Sort results latest first (descending by date/time)
 	sort.Slice(sleepSessions, func(i, j int) bool {
@@ -263,8 +310,7 @@ func (s *StatelessService) FetchAllStats(client *http.Client, days int) (*StatsR
 }
 
 func (s *StatelessService) fetchSleep(client *http.Client, startStr string) ([]SleepSession, error) {
-	filter := fmt.Sprintf("sleep.interval.end_time >= %q", startStr)
-	urlStr := fmt.Sprintf("https://health.googleapis.com/v4/users/me/dataTypes/sleep/dataPoints?filter=%s", url.QueryEscape(filter))
+	urlStr := "https://health.googleapis.com/v4/users/me/dataTypes/sleep/dataPoints"
 
 	var sessions []SleepSession
 
@@ -354,8 +400,7 @@ func (s *StatelessService) fetchSleep(client *http.Client, startStr string) ([]S
 }
 
 func (s *StatelessService) fetchRHR(client *http.Client, startDateStr string) ([]RHRRecord, error) {
-	filter := fmt.Sprintf("daily_resting_heart_rate.date >= %q", startDateStr)
-	urlStr := fmt.Sprintf("https://health.googleapis.com/v4/users/me/dataTypes/daily-resting-heart-rate/dataPoints?filter=%s", url.QueryEscape(filter))
+	urlStr := "https://health.googleapis.com/v4/users/me/dataTypes/daily-resting-heart-rate/dataPoints"
 
 	var records []RHRRecord
 
@@ -404,8 +449,7 @@ func (s *StatelessService) fetchRHR(client *http.Client, startDateStr string) ([
 }
 
 func (s *StatelessService) fetchHRV(client *http.Client, startDateStr string) ([]HRVRecord, error) {
-	filter := fmt.Sprintf("daily_heart_rate_variability.date >= %q", startDateStr)
-	urlStr := fmt.Sprintf("https://health.googleapis.com/v4/users/me/dataTypes/daily-heart-rate-variability/dataPoints?filter=%s", url.QueryEscape(filter))
+	urlStr := "https://health.googleapis.com/v4/users/me/dataTypes/daily-heart-rate-variability/dataPoints"
 
 	var records []HRVRecord
 
@@ -476,11 +520,16 @@ func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDat
 	}
 
 	// 1. Fetch Steps
-	stepsFilter := fmt.Sprintf("steps.interval.start_time >= %q", startStr)
-	stepsURL := fmt.Sprintf("https://health.googleapis.com/v4/users/me/dataTypes/steps/dataPoints?filter=%s", url.QueryEscape(stepsFilter))
+	stepsURL := "https://health.googleapis.com/v4/users/me/dataTypes/steps/dataPoints"
 	for {
 		resp, err := client.Get(stepsURL)
 		if err != nil {
+			break
+		}
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			fmt.Printf("[Stateless Fetch] Steps API error (%d): %s\n", resp.StatusCode, string(body))
 			break
 		}
 		var listResp ListDataPointsResponse
@@ -510,11 +559,16 @@ func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDat
 	}
 
 	// 2. Fetch Active Energy Burned
-	energyFilter := fmt.Sprintf("active_energy_burned.interval.start_time >= %q", startStr)
-	energyURL := fmt.Sprintf("https://health.googleapis.com/v4/users/me/dataTypes/active-energy-burned/dataPoints?filter=%s", url.QueryEscape(energyFilter))
+	energyURL := "https://health.googleapis.com/v4/users/me/dataTypes/active-energy-burned/dataPoints"
 	for {
 		resp, err := client.Get(energyURL)
 		if err != nil {
+			break
+		}
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			fmt.Printf("[Stateless Fetch] Energy API error (%d): %s\n", resp.StatusCode, string(body))
 			break
 		}
 		var listResp ListDataPointsResponse
@@ -543,11 +597,16 @@ func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDat
 	}
 
 	// 3. Fetch Active Minutes
-	minutesFilter := fmt.Sprintf("active_minutes.interval.start_time >= %q", startStr)
-	minutesURL := fmt.Sprintf("https://health.googleapis.com/v4/users/me/dataTypes/active-minutes/dataPoints?filter=%s", url.QueryEscape(minutesFilter))
+	minutesURL := "https://health.googleapis.com/v4/users/me/dataTypes/active-minutes/dataPoints"
 	for {
 		resp, err := client.Get(minutesURL)
 		if err != nil {
+			break
+		}
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			fmt.Printf("[Stateless Fetch] Active Minutes API error (%d): %s\n", resp.StatusCode, string(body))
 			break
 		}
 		var listResp ListDataPointsResponse
