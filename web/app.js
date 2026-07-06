@@ -382,6 +382,29 @@ async function loadStats(forceRefresh = false) {
 }
 
 function showLoadingSpinner(metric) {
+    const chartMap = {
+        overview: ["chart-overview-sleep", "chart-overview-heart"],
+        sleep: ["chart-sleep-durations", "chart-sleep-stages"],
+        heart: ["chart-hrv", "chart-rhr"],
+        rhr: ["chart-hrv", "chart-rhr"],
+        hrv: ["chart-hrv", "chart-rhr"],
+        activity: ["chart-steps", "chart-calories"]
+    };
+    const canvases = chartMap[metric] || [];
+    canvases.forEach(cid => {
+        const canvasEl = document.getElementById(cid);
+        if (canvasEl && canvasEl.parentElement) {
+            let overlay = canvasEl.parentElement.querySelector(".chart-loading-overlay");
+            if (!overlay) {
+                overlay = document.createElement("div");
+                overlay.className = "chart-loading-overlay";
+                canvasEl.parentElement.appendChild(overlay);
+            }
+            overlay.innerHTML = `<i data-lucide="loader" class="spin" style="width: 28px; height: 28px; color: var(--primary-color);"></i><span>Loading chart data...</span>`;
+            overlay.style.display = "flex";
+        }
+    });
+
     if (metric === "sleep") {
         const tbody = document.querySelector("#sleep-history-table tbody");
         if (tbody && (!appData.sleep_sessions || appData.sleep_sessions.length === 0)) {
@@ -407,6 +430,25 @@ function showLoadingSpinner(metric) {
         });
     }
     if (typeof lucide !== "undefined" && lucide.createIcons) lucide.createIcons();
+}
+
+function hideLoadingSpinner(metric) {
+    const chartMap = {
+        overview: ["chart-overview-sleep", "chart-overview-heart"],
+        sleep: ["chart-sleep-durations", "chart-sleep-stages"],
+        heart: ["chart-hrv", "chart-rhr"],
+        rhr: ["chart-hrv", "chart-rhr"],
+        hrv: ["chart-hrv", "chart-rhr"],
+        activity: ["chart-steps", "chart-calories"]
+    };
+    const canvases = chartMap[metric] || [];
+    canvases.forEach(cid => {
+        const canvasEl = document.getElementById(cid);
+        if (canvasEl && canvasEl.parentElement) {
+            const overlay = canvasEl.parentElement.querySelector(".chart-loading-overlay");
+            if (overlay) overlay.remove();
+        }
+    });
 }
 
 async function loadMetric(metric, pageToken = "") {
@@ -490,6 +532,7 @@ async function loadMetric(metric, pageToken = "") {
         showToast(`Failed to load ${metric} data`, true);
     } finally {
         appData[`${metric}_loading`] = false;
+        hideLoadingSpinner(metric);
         if (!appData[`${metric}_loaded`]) {
             if (metric === "sleep") populateSleepTable(appData.sleep_sessions || []);
             else if (metric === "heart") populateHeartTable(appData.rhr_records || [], appData.hrv_records || []);
@@ -698,6 +741,10 @@ function renderChart(canvasId, config) {
     if (!el) {
         console.warn(`Canvas element with ID '${canvasId}' not found.`);
         return;
+    }
+    if (el.parentElement) {
+        const overlay = el.parentElement.querySelector(".chart-loading-overlay");
+        if (overlay) overlay.remove();
     }
     if (activeCharts[canvasId]) {
         activeCharts[canvasId].destroy();
