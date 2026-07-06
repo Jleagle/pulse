@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"log"
 	"net/http"
@@ -83,7 +84,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 			log.Printf("[WARNING] GetOAuthClient failed in handleStatus: %v", err)
 			ClearSessionCookie(w)
 		}
-	} else if err != nil {
+	} else if err != nil && !errors.Is(err, http.ErrNoCookie) && err.Error() != "empty session cookie" {
 		log.Printf("[DEBUG] GetSessionCookie error in handleStatus: %v", err)
 	}
 
