@@ -153,58 +153,6 @@ body {
     gap: 12px;
 }
 
-.sync-status-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    padding: 0 8px;
-}
-
-.status-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    position: relative;
-}
-
-.status-dot.connected {
-    background-color: var(--color-emerald);
-    box-shadow: 0 0 8px var(--color-emerald);
-}
-
-.status-dot.disconnected {
-    background-color: var(--color-rose);
-    box-shadow: 0 0 8px var(--color-rose);
-}
-
-.sync-btn-small {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    color: var(--text-primary);
-    padding: 8px;
-    cursor: pointer;
-    font-weight: 500;
-    font-size: 0.85rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    transition: var(--transition-quick);
-}
-
-.sync-btn-small:hover {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: var(--border-hover);
-}
-
-.sync-btn-small i {
-    width: 14px;
-    height: 14px;
-}
-
 /* Spin animation for sync button icon */
 .spin {
     animation: rotate 1s linear infinite;

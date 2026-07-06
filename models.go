@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -92,7 +93,7 @@ func SetSessionCookie(w http.ResponseWriter, token *oauth2.Token) error {
 		return fmt.Errorf("failed to marshal token: %w", err)
 	}
 
-	encoded := base64.URLEncoding.EncodeToString(tokenJSON)
+	encoded := base64.RawURLEncoding.EncodeToString(tokenJSON)
 	cookie := &http.Cookie{
 		Name:     SessionCookieName,
 		Value:    encoded,
@@ -116,7 +117,13 @@ func GetSessionCookie(r *http.Request) (*oauth2.Token, error) {
 		return nil, fmt.Errorf("empty session cookie")
 	}
 
-	tokenJSON, err := base64.URLEncoding.DecodeString(cookie.Value)
+	val := cookie.Value
+	var tokenJSON []byte
+	if strings.Contains(val, "=") {
+		tokenJSON, err = base64.URLEncoding.DecodeString(val)
+	} else {
+		tokenJSON, err = base64.RawURLEncoding.DecodeString(val)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode session cookie: %w", err)
 	}

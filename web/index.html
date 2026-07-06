@@ -50,14 +50,7 @@
             </nav>
 
             <div class="sidebar-footer">
-                <div class="sync-status-wrapper">
-                    <div id="sync-indicator" class="status-dot disconnected"></div>
-                    <span id="sync-status-text">Disconnected</span>
-                </div>
-                <button id="btn-sidebar-sync" class="sync-btn-small" onclick="triggerRefresh()">
-                    <i data-lucide="refresh-cw" id="sidebar-sync-icon"></i> Live Refresh
-                </button>
-                <div class="sidebar-legal-links" style="display: flex; justify-content: space-between; font-size: 0.75rem; padding: 6px 4px 0; color: var(--text-muted); border-top: 1px dashed var(--border-color); margin-top: 4px;">
+                <div class="sidebar-legal-links" style="display: flex; justify-content: space-between; font-size: 0.8rem; padding: 0 4px; color: var(--text-muted);">
                     <a href="/privacy-policy" onclick="event.preventDefault(); switchTab('privacy-policy');" style="color: var(--text-muted); text-decoration: none; transition: var(--transition-quick);" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">Privacy</a>
                     <span>•</span>
                     <a href="/terms-of-service" onclick="event.preventDefault(); switchTab('terms-of-service');" style="color: var(--text-muted); text-decoration: none; transition: var(--transition-quick);" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">Terms</a>

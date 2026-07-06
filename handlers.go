@@ -4,6 +4,7 @@ import (
 	"embed"
 	"encoding/json"
 	"io/fs"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -68,19 +69,22 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	if err == nil && token != nil {
 		client, err := s.service.GetOAuthClient(r.Context(), token, w)
 		if err == nil {
+			oauthConnected = true
 			profile, err := s.service.FetchUserProfile(client)
 			if err == nil && profile != nil {
-				oauthConnected = true
 				userEmail = profile.Email
 				userName = profile.Name
 				userPic = profile.Picture
 			} else {
-				// Token might be invalid or revoked, clear cookie
-				ClearSessionCookie(w)
+				log.Printf("[WARNING] FetchUserProfile failed (userinfo API might be disabled), using default user name: %v", err)
+				userName = "Connected User"
 			}
 		} else {
+			log.Printf("[WARNING] GetOAuthClient failed in handleStatus: %v", err)
 			ClearSessionCookie(w)
 		}
+	} else if err != nil {
+		log.Printf("[DEBUG] GetSessionCookie error in handleStatus: %v", err)
 	}
 
 	if userName == "" && userEmail != "" {
@@ -106,23 +110,7 @@ func (s *Server) handleAuthURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	config := &oauth2.Config{
-		ClientID:     s.service.clientID,
-		ClientSecret: s.service.clientSecret,
-		Endpoint: oauth2.Endpoint{
-			AuthURL: "https://accounts.google.com/o/oauth2/auth",
-		},
-		RedirectURL: s.redirectURI,
-		Scopes: []string{
-			"https://www.googleapis.com/auth/googlehealth.sleep.readonly",
-			"https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly",
-			"https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly",
-			"https://www.googleapis.com/auth/googlehealth.profile.readonly",
-			"https://www.googleapis.com/auth/userinfo.email",
-			"https://www.googleapis.com/auth/userinfo.profile",
-		},
-	}
-
+	config := s.service.GetOAuthConfig(s.redirectURI)
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline, oauth2.ApprovalForce)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"url": authURL})
@@ -131,42 +119,37 @@ func (s *Server) handleAuthURL(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
 	if code == "" {
-		http.Redirect(w, r, "/?error=no_code", http.StatusTemporaryRedirect)
+		http.Redirect(w, r, "/?error=no_code", http.StatusFound)
 		return
 	}
 
 	if s.service.clientID == "" || s.service.clientSecret == "" {
-		http.Redirect(w, r, "/?error=server_not_configured", http.StatusTemporaryRedirect)
+		http.Redirect(w, r, "/?error=server_not_configured", http.StatusFound)
 		return
 	}
 
-	config := &oauth2.Config{
-		ClientID:     s.service.clientID,
-		ClientSecret: s.service.clientSecret,
-		Endpoint: oauth2.Endpoint{
-			TokenURL: "https://oauth2.googleapis.com/token",
-		},
-		RedirectURL: s.redirectURI,
-	}
-
+	config := s.service.GetOAuthConfig(s.redirectURI)
 	token, err := config.Exchange(r.Context(), code)
 	if err != nil {
-		http.Redirect(w, r, "/?error="+url.QueryEscape(err.Error()), http.StatusTemporaryRedirect)
+		log.Printf("[ERROR] OAuth token exchange failed: %v", err)
+		http.Redirect(w, r, "/?error="+url.QueryEscape(err.Error()), http.StatusFound)
 		return
 	}
 
 	if err := SetSessionCookie(w, token); err != nil {
-		http.Redirect(w, r, "/?error=cookie_error", http.StatusTemporaryRedirect)
+		log.Printf("[ERROR] Failed to set session cookie: %v", err)
+		http.Redirect(w, r, "/?error=cookie_error", http.StatusFound)
 		return
 	}
 
-	http.Redirect(w, r, "/?connected=true", http.StatusTemporaryRedirect)
+	log.Printf("✅ OAuth Exchange successful and session cookie set!")
+	http.Redirect(w, r, "/?connected=true", http.StatusFound)
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	ClearSessionCookie(w)
 	if r.Method == http.MethodGet {
-		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

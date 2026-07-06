@@ -120,7 +120,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const pathTab = window.location.pathname.replace("/", "") || urlParams.get("tab") || window.location.hash.replace("#", "");
     const initialTab = ["overview", "sleep", "heart", "activity", "settings", "privacy-policy", "terms-of-service"].includes(pathTab) ? pathTab : "overview";
 
-    if (urlParams.get("connected") === "true") {
+    const justConnected = urlParams.get("connected") === "true";
+    if (justConnected) {
         showToast("Connected to Google Health successfully!");
         window.history.replaceState({}, document.title, initialTab === "overview" ? "/" : `/${initialTab}`);
     } else if (urlParams.get("error")) {
@@ -135,7 +136,9 @@ document.addEventListener("DOMContentLoaded", () => {
         if (appStatus.oauth_connected) {
             loadStats();
         } else {
-            showToast("Previewing sample health metrics in Guest Mode. Click Guest icon or Settings to login!", false);
+            if (!justConnected) {
+                showToast("Previewing sample health metrics in Guest Mode. Click Guest icon or Settings to login!", false);
+            }
             loadStats();
         }
     });
@@ -199,9 +202,6 @@ async function refreshStatus() {
         const res = await fetch("/api/status");
         appStatus = await res.json();
 
-        // Update connection status indicators
-        const syncDot = document.getElementById("sync-indicator");
-        const syncText = document.getElementById("sync-status-text");
         const authIcon = document.getElementById("auth-status-icon");
         const authTitle = document.getElementById("auth-status-title");
         const authDesc = document.getElementById("auth-status-desc");
@@ -222,9 +222,6 @@ async function refreshStatus() {
         }
 
         if (appStatus.oauth_connected) {
-            syncDot.className = "status-dot connected";
-            syncText.textContent = "Live Session";
-            
             authIcon.className = "success-icon";
             authIcon.setAttribute("data-lucide", "shield-check");
             authTitle.textContent = "Connected to Google Health";
@@ -248,9 +245,6 @@ async function refreshStatus() {
                 avatarBadge.textContent = (appStatus.user_name || "U")[0].toUpperCase();
             }
         } else {
-            syncDot.className = "status-dot disconnected";
-            syncText.textContent = "Disconnected";
-            
             authIcon.className = "";
             authIcon.setAttribute("data-lucide", "shield-alert");
             authTitle.textContent = "Not Connected";
@@ -314,13 +308,9 @@ async function logout() {
 
 // Trigger Live API Refresh
 async function triggerRefresh() {
-    const btnSidebar = document.getElementById("btn-sidebar-sync");
     const btnSettings = document.getElementById("btn-force-sync");
-    const iconSidebar = document.getElementById("sidebar-sync-icon");
 
-    if (btnSidebar) btnSidebar.disabled = true;
     if (btnSettings) btnSettings.disabled = true;
-    if (iconSidebar) iconSidebar.classList.add("spin");
 
     showToast("Querying Google Health API for complete health history...");
 
@@ -331,9 +321,7 @@ async function triggerRefresh() {
     } catch (e) {
         showToast("Failed to refresh live metrics", true);
     } finally {
-        if (btnSidebar) btnSidebar.disabled = false;
         if (btnSettings) btnSettings.disabled = false;
-        if (iconSidebar) iconSidebar.classList.remove("spin");
     }
 }
 

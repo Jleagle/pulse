@@ -158,19 +158,16 @@ func (s *StatelessService) getWithRateLimit(client *http.Client, urlStr string) 
 	return resp, nil
 }
 
-// Helper to get OAuth Client and auto-refresh token in cookie if changed
-func (s *StatelessService) GetOAuthClient(ctx context.Context, token *oauth2.Token, w http.ResponseWriter) (*http.Client, error) {
-	if s.clientID == "" || s.clientSecret == "" {
-		return nil, fmt.Errorf("server OAuth client credentials are not configured")
-	}
-
-	config := &oauth2.Config{
+// GetOAuthConfig returns a standardized oauth2.Config instance
+func (s *StatelessService) GetOAuthConfig(redirectURI string) *oauth2.Config {
+	return &oauth2.Config{
 		ClientID:     s.clientID,
 		ClientSecret: s.clientSecret,
 		Endpoint: oauth2.Endpoint{
 			AuthURL:  "https://accounts.google.com/o/oauth2/auth",
 			TokenURL: "https://oauth2.googleapis.com/token",
 		},
+		RedirectURL: redirectURI,
 		Scopes: []string{
 			"https://www.googleapis.com/auth/googlehealth.sleep.readonly",
 			"https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly",
@@ -180,7 +177,15 @@ func (s *StatelessService) GetOAuthClient(ctx context.Context, token *oauth2.Tok
 			"https://www.googleapis.com/auth/userinfo.profile",
 		},
 	}
+}
 
+// Helper to get OAuth Client and auto-refresh token in cookie if changed
+func (s *StatelessService) GetOAuthClient(ctx context.Context, token *oauth2.Token, w http.ResponseWriter) (*http.Client, error) {
+	if s.clientID == "" || s.clientSecret == "" {
+		return nil, fmt.Errorf("server OAuth client credentials are not configured")
+	}
+
+	config := s.GetOAuthConfig("")
 	ts := config.TokenSource(ctx, token)
 	newToken, err := ts.Token()
 	if err != nil {
@@ -197,9 +202,15 @@ func (s *StatelessService) GetOAuthClient(ctx context.Context, token *oauth2.Tok
 
 // Fetch User Profile from Google
 func (s *StatelessService) FetchUserProfile(client *http.Client) (*UserProfile, error) {
-	resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
-	if err != nil {
-		return nil, err
+	resp, err := client.Get("https://www.googleapis.com/oauth2/v3/userinfo")
+	if err != nil || resp.StatusCode != http.StatusOK {
+		if resp != nil {
+			resp.Body.Close()
+		}
+		resp, err = client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
+		if err != nil {
+			return nil, err
+		}
 	}
 	defer resp.Body.Close()
 
