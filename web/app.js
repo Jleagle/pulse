@@ -47,6 +47,17 @@ function resetAppData() {
         activity_loaded: false,
         activity_loading: false
     };
+    const sleepTbody = document.querySelector("#sleep-history-table tbody");
+    if (sleepTbody) sleepTbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
+    const heartTbody = document.querySelector("#heart-history-table tbody");
+    if (heartTbody) heartTbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
+    const actTbody = document.querySelector("#activity-history-table tbody");
+    if (actTbody) actTbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
+    const cards = ["overview-sleep-duration", "overview-rhr", "overview-hrv", "overview-steps"];
+    cards.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = "--";
+    });
 }
 
 function saveCache() {
@@ -322,20 +333,16 @@ async function logout() {
     }
 }
 
-// Trigger Live API Refresh
+// Clear Cache and let metrics lazy load when visited
 async function triggerRefresh() {
     const btnSettings = document.getElementById("btn-force-sync");
-
     if (btnSettings) btnSettings.disabled = true;
-
-    showToast("Querying Google Health API for complete health history...");
 
     try {
         resetAppData();
-        await loadStats(true);
-        showToast("Live metrics refreshed from Google Health API!");
+        showToast("Browser cache cleared! Health data will lazy load when you visit each tab.");
     } catch (e) {
-        showToast("Failed to refresh live metrics", true);
+        showToast("Failed to clear cache", true);
     } finally {
         if (btnSettings) btnSettings.disabled = false;
     }
@@ -680,16 +687,22 @@ function populateActivityTable(records) {
     if (records && records.length > 0) {
         records.forEach(a => {
             const tr = document.createElement("tr");
+            const goalMet = a.steps >= 10000;
+            const badgeClass = goalMet ? "badge badge-success" : "badge badge-outline";
+            const iconName = goalMet ? "check-circle-2" : "circle-dashed";
+            const goalText = goalMet ? "Yes" : "No";
             tr.innerHTML = `
                 <td>${a.date}</td>
                 <td><strong>${a.steps.toLocaleString()}</strong></td>
                 <td>${a.calories_burned} kcal</td>
                 <td>${a.active_minutes} mins</td>
+                <td><span class="${badgeClass}" style="gap: 6px;"><i data-lucide="${iconName}" style="width: 15px; height: 15px;"></i>${goalText} (${Math.round((a.steps / 10000) * 100)}%)</span></td>
             `;
             actTbody.appendChild(tr);
         });
+        if (typeof lucide !== "undefined" && lucide.createIcons) lucide.createIcons();
     } else {
-        actTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
+        actTbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
     }
 }
 
