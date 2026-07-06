@@ -182,24 +182,28 @@ function switchTab(tabId, updateUrl = true) {
     if (true) {
         if (tabId === "sleep") {
             if (!appData.sleep_loaded && !appData.sleep_loading) loadMetric("sleep");
+            else if (appData.sleep_loading) showLoadingSpinner("sleep");
             else if (appData.sleep_loaded) {
                 populateSleepTable(appData.sleep_sessions);
                 renderSleepCharts({ sleep_sessions: appData.sleep_sessions });
             }
         } else if (tabId === "heart") {
             if (!appData.heart_loaded && !appData.heart_loading) loadMetric("heart");
+            else if (appData.heart_loading) showLoadingSpinner("heart");
             else if (appData.heart_loaded) {
                 populateHeartTable(appData.rhr_records, appData.hrv_records);
                 renderHeartCharts({ rhr_records: appData.rhr_records, hrv_records: appData.hrv_records });
             }
         } else if (tabId === "activity") {
             if (!appData.activity_loaded && !appData.activity_loading) loadMetric("activity");
+            else if (appData.activity_loading) showLoadingSpinner("activity");
             else if (appData.activity_loaded) {
                 populateActivityTable(appData.activity_records);
                 renderActivityCharts({ activity_records: appData.activity_records });
             }
         } else if (tabId === "overview") {
             if (!appData.overview_loaded && !appData.overview_loading) loadMetric("overview");
+            else if (appData.overview_loading) showLoadingSpinner("overview");
             else if (appData.overview_loaded) {
                 populateOverviewCards(appData);
                 renderOverviewCharts(appData);
@@ -377,9 +381,38 @@ async function loadStats(forceRefresh = false) {
     }
 }
 
+function showLoadingSpinner(metric) {
+    if (metric === "sleep") {
+        const tbody = document.querySelector("#sleep-history-table tbody");
+        if (tbody && (!appData.sleep_sessions || appData.sleep_sessions.length === 0)) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 3rem 0;"><div style="display: inline-flex; align-items: center; gap: 10px; color: var(--text-muted); font-weight: 500;"><i data-lucide="loader" class="spin" style="width: 22px; height: 22px; color: var(--primary-color);"></i> Loading sleep history from Google Health...</div></td></tr>`;
+        }
+    } else if (metric === "heart" || metric === "rhr" || metric === "hrv") {
+        const tbody = document.querySelector("#heart-history-table tbody");
+        if (tbody && (!appData.rhr_records || appData.rhr_records.length === 0)) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 3rem 0;"><div style="display: inline-flex; align-items: center; gap: 10px; color: var(--text-muted); font-weight: 500;"><i data-lucide="loader" class="spin" style="width: 22px; height: 22px; color: var(--primary-color);"></i> Loading heart vitals from Google Health...</div></td></tr>`;
+        }
+    } else if (metric === "activity") {
+        const tbody = document.querySelector("#activity-history-table tbody");
+        if (tbody && (!appData.activity_records || appData.activity_records.length === 0)) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 3rem 0;"><div style="display: inline-flex; align-items: center; gap: 10px; color: var(--text-muted); font-weight: 500;"><i data-lucide="loader" class="spin" style="width: 22px; height: 22px; color: var(--primary-color);"></i> Loading activity log from Google Health...</div></td></tr>`;
+        }
+    } else if (metric === "overview") {
+        const cards = ["overview-sleep-duration", "overview-rhr", "overview-hrv", "overview-steps"];
+        cards.forEach(id => {
+            const el = document.getElementById(id);
+            if (el && (el.textContent.includes("--") || el.textContent.trim() === "")) {
+                el.innerHTML = `<i data-lucide="loader" class="spin" style="width: 22px; height: 22px; display: inline-block; color: var(--primary-color);"></i>`;
+            }
+        });
+    }
+    if (typeof lucide !== "undefined" && lucide.createIcons) lucide.createIcons();
+}
+
 async function loadMetric(metric, pageToken = "") {
     if (appData[`${metric}_loading`]) return;
     appData[`${metric}_loading`] = true;
+    showLoadingSpinner(metric);
 
     try {
         let url = `/api/stats?limit=${currentHorizonDays}&metric=${metric}`;
@@ -457,6 +490,12 @@ async function loadMetric(metric, pageToken = "") {
         showToast(`Failed to load ${metric} data`, true);
     } finally {
         appData[`${metric}_loading`] = false;
+        if (!appData[`${metric}_loaded`]) {
+            if (metric === "sleep") populateSleepTable(appData.sleep_sessions || []);
+            else if (metric === "heart") populateHeartTable(appData.rhr_records || [], appData.hrv_records || []);
+            else if (metric === "activity") populateActivityTable(appData.activity_records || []);
+            else if (metric === "overview") populateOverviewCards(appData);
+        }
     }
 }
 

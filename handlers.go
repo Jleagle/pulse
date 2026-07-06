@@ -50,11 +50,20 @@ func (s *Server) Routes() http.Handler {
 	for _, tab := range []string{"overview", "sleep", "heart", "activity", "settings", "privacy-policy", "terms-of-service"} {
 		tabName := tab
 		mux.HandleFunc("GET /"+tabName, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			w.Header().Set("Pragma", "no-cache")
+			w.Header().Set("Expires", "0")
 			http.ServeFileFS(w, r, subFS, "index.html")
 		})
 	}
 
-	mux.Handle("/", http.FileServer(http.FS(subFS)))
+	fileServer := http.FileServer(http.FS(subFS))
+	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
+		fileServer.ServeHTTP(w, r)
+	}))
 
 	return mux
 }
