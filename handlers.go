@@ -38,6 +38,20 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/logout", s.handleLogout)
 	mux.HandleFunc("GET /api/stats", s.handleStats)
 
+	// Legal & OAuth compliance redirects
+	mux.HandleFunc("GET /privacy", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/privacy.html", http.StatusMovedPermanently)
+	})
+	mux.HandleFunc("GET /privacy-policy", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/privacy.html", http.StatusMovedPermanently)
+	})
+	mux.HandleFunc("GET /terms", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/terms.html", http.StatusMovedPermanently)
+	})
+	mux.HandleFunc("GET /terms-of-service", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/terms.html", http.StatusMovedPermanently)
+	})
+
 	// Frontend static assets
 	subFS, err := fs.Sub(webAssets, "web")
 	if err != nil {

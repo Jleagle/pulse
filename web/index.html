@@ -57,6 +57,11 @@
                 <button id="btn-sidebar-sync" class="sync-btn-small" onclick="triggerRefresh()">
                     <i data-lucide="refresh-cw" id="sidebar-sync-icon"></i> Live Refresh
                 </button>
+                <div class="sidebar-legal-links" style="display: flex; justify-content: space-between; font-size: 0.75rem; padding: 6px 4px 0; color: var(--text-muted); border-top: 1px dashed var(--border-color); margin-top: 4px;">
+                    <a href="/privacy.html" style="color: var(--text-muted); text-decoration: none; transition: var(--transition-quick);" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">Privacy</a>
+                    <span>•</span>
+                    <a href="/terms.html" style="color: var(--text-muted); text-decoration: none; transition: var(--transition-quick);" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">Terms</a>
+                </div>
             </div>
         </aside>
 
@@ -92,6 +97,9 @@
                                 </svg>
                                 <span>Connect Google Health</span>
                             </button>
+                        </div>
+                        <div class="hero-legal-notice" style="margin-top: 14px; font-size: 0.8rem; color: var(--text-muted);">
+                            By connecting, you agree to our <a href="/terms.html" style="color: var(--text-secondary); text-decoration: underline;">Terms of Service</a> and <a href="/privacy.html" style="color: var(--text-secondary); text-decoration: underline;">Privacy Policy</a>.
                         </div>
                     </div>
                 </div>
@@ -403,6 +411,9 @@
                                 </svg>
                                 <span>Connect Google Health</span>
                             </button>
+                            <div style="margin-top: 12px; font-size: 0.8rem; color: var(--text-muted);">
+                                View our <a href="/privacy.html" style="color: var(--text-secondary); text-decoration: underline;">Privacy Policy</a> & <a href="/terms.html" style="color: var(--text-secondary); text-decoration: underline;">Terms of Service</a>.
+                            </div>
                         </div>
 
                         <div class="danger-zone-box">
