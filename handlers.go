@@ -195,8 +195,21 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	stats, err := s.service.FetchAllStats(client, days)
+	metric := r.URL.Query().Get("metric")
+	pageToken := r.URL.Query().Get("pageToken")
+
+	stats, err := s.service.FetchAllStats(client, days, metric, pageToken)
 	if err != nil {
+		if strings.Contains(err.Error(), "RATE_LIMIT_BACKOFF") {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusTooManyRequests)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"error":       "rate_limited",
+				"message":     "Google Health API rate limit reached. Pausing requests...",
+				"retry_after": 60,
+			})
+			return
+		}
 		http.Error(w, "Failed to fetch health stats from Google API: "+err.Error(), http.StatusInternalServerError)
 		return
 	}

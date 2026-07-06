@@ -9,6 +9,91 @@ let appStatus = {
 
 let currentHorizonDays = 14;
 
+let appData = {
+    overview_loaded: false,
+    sleep_sessions: [],
+    sleep_next_page_token: "",
+    sleep_loaded: false,
+    sleep_loading: false,
+
+    rhr_records: [],
+    rhr_next_page_token: "",
+    hrv_records: [],
+    hrv_next_page_token: "",
+    heart_loaded: false,
+    heart_loading: false,
+
+    activity_records: [],
+    activity_next_page_token: "",
+    activity_loaded: false,
+    activity_loading: false
+};
+
+function resetAppData() {
+    try { localStorage.removeItem("pulse_app_cache"); } catch (e) {}
+    appData = {
+        overview_loaded: false,
+        sleep_sessions: [],
+        sleep_next_page_token: "",
+        sleep_loaded: false,
+        sleep_loading: false,
+        rhr_records: [],
+        rhr_next_page_token: "",
+        hrv_records: [],
+        hrv_next_page_token: "",
+        heart_loaded: false,
+        heart_loading: false,
+        activity_records: [],
+        activity_next_page_token: "",
+        activity_loaded: false,
+        activity_loading: false
+    };
+}
+
+function saveCache() {
+    try {
+        const cachePayload = {
+            horizon: currentHorizonDays,
+            timestamp: Date.now(),
+            data: {
+                overview_loaded: appData.overview_loaded,
+                sleep_sessions: appData.sleep_sessions,
+                sleep_next_page_token: appData.sleep_next_page_token,
+                sleep_loaded: appData.sleep_loaded,
+                rhr_records: appData.rhr_records,
+                rhr_next_page_token: appData.rhr_next_page_token,
+                hrv_records: appData.hrv_records,
+                hrv_next_page_token: appData.hrv_next_page_token,
+                heart_loaded: appData.heart_loaded,
+                activity_records: appData.activity_records,
+                activity_next_page_token: appData.activity_next_page_token,
+                activity_loaded: appData.activity_loaded
+            }
+        };
+        localStorage.setItem("pulse_app_cache", JSON.stringify(cachePayload));
+    } catch (e) {
+        console.warn("Failed to save to localStorage:", e);
+    }
+}
+
+function loadCache() {
+    try {
+        const raw = localStorage.getItem("pulse_app_cache");
+        if (!raw) return false;
+        const cached = JSON.parse(raw);
+        if (cached.horizon === currentHorizonDays && cached.data && (Date.now() - cached.timestamp < 24 * 60 * 60 * 1000)) {
+            Object.assign(appData, cached.data);
+            appData.sleep_loading = false;
+            appData.heart_loading = false;
+            appData.activity_loading = false;
+            return true;
+        }
+    } catch (e) {
+        console.warn("Failed to load from localStorage:", e);
+    }
+    return false;
+}
+
 // Global chart references for disposal
 const activeCharts = {};
 
@@ -57,6 +142,18 @@ function switchTab(tabId) {
         settings: "Application Settings"
     };
     document.getElementById("page-title").textContent = titles[tabId] || "Dashboard";
+
+    if (appStatus.oauth_connected) {
+        if (tabId === "sleep" && !appData.sleep_loaded && !appData.sleep_loading) {
+            loadMetric("sleep");
+        } else if (tabId === "heart" && !appData.heart_loaded && !appData.heart_loading) {
+            loadMetric("heart");
+        } else if (tabId === "activity" && !appData.activity_loaded && !appData.activity_loading) {
+            loadMetric("activity");
+        } else if (tabId === "overview" && !appData.overview_loaded) {
+            loadMetric("overview");
+        }
+    }
 }
 
 // Fetch general configuration status
@@ -149,6 +246,7 @@ function setTimeHorizon(days) {
     if (activeBtn) activeBtn.classList.add("active");
     
     showToast(`Time horizon set to ${days} days. Refreshing live API metrics...`);
+    resetAppData();
     loadStats();
 }
 
@@ -169,6 +267,8 @@ async function logout() {
     if (!confirm("Are you sure you want to sign out? This will clear your session cookie and empty live memory graphs.")) {
         return;
     }
+
+    try { localStorage.removeItem("pulse_app_cache"); } catch (e) {}
 
     try {
         const res = await fetch("/api/logout", { method: "POST" });
@@ -196,7 +296,8 @@ async function triggerRefresh() {
     showToast(`Querying Google Health API for last ${currentHorizonDays} days...`);
 
     try {
-        await loadStats();
+        resetAppData();
+        await loadStats(true);
         showToast("Live metrics refreshed from Google Health API!");
     } catch (e) {
         showToast("Failed to refresh live metrics", true);
@@ -208,101 +309,161 @@ async function triggerRefresh() {
 }
 
 // Fetch stats and render UI
-async function loadStats() {
+async function loadStats(forceRefresh = false) {
+    const activeTabPane = document.querySelector(".tab-pane.active");
+    const activeTabId = activeTabPane ? activeTabPane.id.replace("tab-", "") : "overview";
+    
+    if (!forceRefresh && loadCache()) {
+        const raw = localStorage.getItem("pulse_app_cache");
+        const cacheAgeMin = raw ? Math.round((Date.now() - JSON.parse(raw).timestamp) / 60000) : 0;
+        showToast(`Loaded metrics from browser storage (${cacheAgeMin}m ago). Click Sync to fetch live from API.`);
+        
+        if (appData.overview_loaded) {
+            populateOverviewCards(appData);
+            renderOverviewCharts(appData);
+        }
+        if (appData.sleep_loaded) {
+            populateSleepTable(appData.sleep_sessions);
+            renderSleepCharts({ sleep_sessions: appData.sleep_sessions });
+        }
+        if (appData.heart_loaded) {
+            populateRHRTable(appData.rhr_records);
+            populateHRVTable(appData.hrv_records);
+            renderHeartCharts({ rhr_records: appData.rhr_records, hrv_records: appData.hrv_records });
+        }
+        if (appData.activity_loaded) {
+            populateActivityTable(appData.activity_records);
+            renderActivityCharts({ activity_records: appData.activity_records });
+        }
+
+        if (activeTabId !== "overview" && activeTabId !== "settings" && !appData[`${activeTabId}_loaded`]) {
+            await loadMetric(activeTabId);
+        }
+        return;
+    }
+
+    // Always load overview first to populate top cards
+    await loadMetric("overview");
+    if (activeTabId !== "overview" && activeTabId !== "settings") {
+        await loadMetric(activeTabId);
+    }
+}
+
+async function loadMetric(metric, pageToken = "") {
+    if (appData[`${metric}_loading`]) return;
+    appData[`${metric}_loading`] = true;
+
     try {
-        const res = await fetch(`/api/stats?limit=${currentHorizonDays}`);
+        let url = `/api/stats?limit=${currentHorizonDays}&metric=${metric}`;
+        if (pageToken) {
+            url += `&pageToken=${encodeURIComponent(pageToken)}`;
+        }
+        const res = await fetch(url);
         if (!res.ok) {
             if (res.status === 401) {
                 appStatus.oauth_connected = false;
                 await refreshStatus();
+            } else if (res.status === 429) {
+                const errJson = await res.json().catch(() => ({}));
+                const retrySec = errJson.retry_after || 60;
+                showToast(`Rate limited by Google API. Paused for ${retrySec} seconds...`, true);
             }
             return;
         }
 
         const data = await res.json();
 
-        // 1. Populate Overview Statistics
-        populateOverviewCards(data);
-
-        // 2. Populate Tables
-        populateTables(data);
-
-        // 3. Render Charts
-        renderOverviewCharts(data);
-        renderSleepCharts(data);
-        renderHeartCharts(data);
-        renderActivityCharts(data);
-
-    } catch (e) {
-        showToast("Failed to fetch stats for charts", true);
-    }
-}
-
-function populateOverviewCards(data) {
-    // Sleep Card
-    const sleepVal = document.getElementById("overview-sleep-duration");
-    const sleepSub = document.getElementById("overview-sleep-type");
-    if (data.sleep_sessions && data.sleep_sessions.length > 0) {
-        const lastSleep = data.sleep_sessions[0];
-        const hrs = Math.floor(lastSleep.duration_minutes / 60);
-        const mins = lastSleep.duration_minutes % 60;
-        sleepVal.textContent = `${hrs}h ${mins}m`;
-        
-        const sleepDate = new Date(lastSleep.start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        sleepSub.textContent = `Asleep ${lastSleep.minutes_asleep}m (${lastSleep.sleep_type} type) on ${sleepDate}`;
-    } else {
-        sleepVal.textContent = "--h --m";
-        sleepSub.textContent = "No sleep data recorded";
-    }
-
-    // RHR Card
-    const rhrVal = document.getElementById("overview-rhr");
-    const rhrSub = document.getElementById("overview-rhr-change");
-    if (data.rhr_records && data.rhr_records.length > 0) {
-        const latestRHR = data.rhr_records[0];
-        rhrVal.innerHTML = `${latestRHR.beats_per_minute} <span class="unit">BPM</span>`;
-        rhrSub.textContent = `Recorded on ${latestRHR.date}`;
-    } else {
-        rhrVal.innerHTML = `-- <span class="unit">BPM</span>`;
-        rhrSub.textContent = "No heart rate data";
-    }
-
-    // HRV Card
-    const hrvVal = document.getElementById("overview-hrv");
-    const hrvSub = document.getElementById("overview-hrv-details");
-    if (data.hrv_records && data.hrv_records.length > 0) {
-        const latestHRV = data.hrv_records[0];
-        hrvVal.innerHTML = `${Math.round(latestHRV.avg_hrv_ms)} <span class="unit">ms</span>`;
-        
-        let details = `Date: ${latestHRV.date}`;
-        if (latestHRV.deep_sleep_rmssd) {
-            details += ` | Deep Sleep RMSSD: ${Math.round(latestHRV.deep_sleep_rmssd)}ms`;
+        if (metric === "overview") {
+            appData.overview_loaded = true;
+            populateOverviewCards(data);
+            renderOverviewCharts(data);
+            if (!appData.sleep_loaded) {
+                appData.sleep_sessions = data.sleep_sessions || [];
+                appData.sleep_next_page_token = data.sleep_next_page_token || "";
+                appData.sleep_loaded = true;
+                populateSleepTable(appData.sleep_sessions);
+                renderSleepCharts({ sleep_sessions: appData.sleep_sessions });
+            }
+            if (!appData.heart_loaded) {
+                appData.rhr_records = data.rhr_records || [];
+                appData.rhr_next_page_token = data.rhr_next_page_token || "";
+                appData.hrv_records = data.hrv_records || [];
+                appData.hrv_next_page_token = data.hrv_next_page_token || "";
+                appData.heart_loaded = true;
+                populateRHRTable(appData.rhr_records);
+                populateHRVTable(appData.hrv_records);
+                renderHeartCharts({ rhr_records: appData.rhr_records, hrv_records: appData.hrv_records });
+            }
+            if (!appData.activity_loaded) {
+                appData.activity_records = data.activity_records || [];
+                appData.activity_next_page_token = data.activity_next_page_token || "";
+                appData.activity_loaded = true;
+                populateActivityTable(appData.activity_records);
+                renderActivityCharts({ activity_records: appData.activity_records });
+            }
+        } else if (metric === "sleep") {
+            if (pageToken) {
+                appData.sleep_sessions = appData.sleep_sessions.concat(data.sleep_sessions || []);
+            } else {
+                appData.sleep_sessions = data.sleep_sessions || [];
+            }
+            appData.sleep_next_page_token = data.sleep_next_page_token || "";
+            appData.sleep_loaded = true;
+            populateSleepTable(appData.sleep_sessions);
+            renderSleepCharts({ sleep_sessions: appData.sleep_sessions });
+        } else if (metric === "heart" || metric === "rhr" || metric === "hrv") {
+            if (metric === "heart" || metric === "rhr") {
+                if (pageToken && metric === "rhr") {
+                    appData.rhr_records = appData.rhr_records.concat(data.rhr_records || []);
+                } else {
+                    appData.rhr_records = data.rhr_records || [];
+                }
+                appData.rhr_next_page_token = data.rhr_next_page_token || "";
+                populateRHRTable(appData.rhr_records);
+            }
+            if (metric === "heart" || metric === "hrv") {
+                if (pageToken && metric === "hrv") {
+                    appData.hrv_records = appData.hrv_records.concat(data.hrv_records || []);
+                } else {
+                    appData.hrv_records = data.hrv_records || [];
+                }
+                appData.hrv_next_page_token = data.hrv_next_page_token || "";
+                populateHRVTable(appData.hrv_records);
+            }
+            appData.heart_loaded = true;
+            renderHeartCharts({ rhr_records: appData.rhr_records, hrv_records: appData.hrv_records });
+        } else if (metric === "activity") {
+            if (pageToken) {
+                appData.activity_records = appData.activity_records.concat(data.activity_records || []);
+            } else {
+                appData.activity_records = data.activity_records || [];
+            }
+            appData.activity_next_page_token = data.activity_next_page_token || "";
+            appData.activity_loaded = true;
+            populateActivityTable(appData.activity_records);
+            renderActivityCharts({ activity_records: appData.activity_records });
         }
-        hrvSub.textContent = details;
-    } else {
-        hrvVal.innerHTML = `-- <span class="unit">ms</span>`;
-        hrvSub.textContent = "No HRV data";
-    }
-
-    // Steps Card
-    const stepsVal = document.getElementById("overview-steps");
-    const calVal = document.getElementById("overview-calories");
-    if (data.activity_records && data.activity_records.length > 0) {
-        const latestAct = data.activity_records[0];
-        stepsVal.textContent = latestAct.steps.toLocaleString();
-        calVal.textContent = `${latestAct.calories_burned} kcal | ${latestAct.active_minutes} active mins`;
-    } else {
-        stepsVal.textContent = "--,---";
-        calVal.textContent = "-- kcal burned";
+        saveCache();
+    } catch (e) {
+        showToast(`Failed to load ${metric} data`, true);
+    } finally {
+        appData[`${metric}_loading`] = false;
     }
 }
 
 function populateTables(data) {
-    // 1. Sleep Table
+    populateSleepTable(data.sleep_sessions || []);
+    populateRHRTable(data.rhr_records || []);
+    populateHRVTable(data.hrv_records || []);
+    populateActivityTable(data.activity_records || []);
+}
+
+function populateSleepTable(sessions) {
     const sleepTbody = document.querySelector("#sleep-history-table tbody");
+    if (!sleepTbody) return;
     sleepTbody.innerHTML = "";
-    if (data.sleep_sessions && data.sleep_sessions.length > 0) {
-        data.sleep_sessions.forEach(s => {
+    if (sessions && sessions.length > 0) {
+        sessions.forEach(s => {
             const tr = document.createElement("tr");
             const st = new Date(s.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const et = new Date(s.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -325,12 +486,14 @@ function populateTables(data) {
     } else {
         sleepTbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No records found. Click sync to retrieve your health statistics.</td></tr>`;
     }
+}
 
-    // 2. RHR Table
+function populateRHRTable(records) {
     const rhrTbody = document.querySelector("#rhr-history-table tbody");
+    if (!rhrTbody) return;
     rhrTbody.innerHTML = "";
-    if (data.rhr_records && data.rhr_records.length > 0) {
-        data.rhr_records.forEach(r => {
+    if (records && records.length > 0) {
+        records.forEach(r => {
             const tr = document.createElement("tr");
             tr.innerHTML = `
                 <td>${r.date}</td>
@@ -341,12 +504,14 @@ function populateTables(data) {
     } else {
         rhrTbody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
     }
+}
 
-    // 3. HRV Table
+function populateHRVTable(records) {
     const hrvTbody = document.querySelector("#hrv-history-table tbody");
+    if (!hrvTbody) return;
     hrvTbody.innerHTML = "";
-    if (data.hrv_records && data.hrv_records.length > 0) {
-        data.hrv_records.forEach(r => {
+    if (records && records.length > 0) {
+        records.forEach(r => {
             const tr = document.createElement("tr");
             const deepVal = r.deep_sleep_rmssd ? `${Math.round(r.deep_sleep_rmssd)} ms` : "--";
             const entropyVal = r.entropy ? r.entropy.toFixed(2) : "--";
@@ -361,12 +526,14 @@ function populateTables(data) {
     } else {
         hrvTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
     }
+}
 
-    // 4. Activity Table
+function populateActivityTable(records) {
     const actTbody = document.querySelector("#activity-history-table tbody");
+    if (!actTbody) return;
     actTbody.innerHTML = "";
-    if (data.activity_records && data.activity_records.length > 0) {
-        data.activity_records.forEach(a => {
+    if (records && records.length > 0) {
+        records.forEach(a => {
             const tr = document.createElement("tr");
             tr.innerHTML = `
                 <td>${a.date}</td>
@@ -380,6 +547,48 @@ function populateTables(data) {
         actTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
     }
 }
+
+function checkInfiniteScroll() {
+    const activeTabPane = document.querySelector(".tab-pane.active");
+    if (!activeTabPane) return;
+
+    const tabId = activeTabPane.id.replace("tab-", "");
+    
+    const windowScrolledNearBottom = (window.innerHeight + window.scrollY) >= (document.documentElement.scrollHeight - 300);
+
+    let tableScrolledNearBottom = false;
+    const tableContainers = activeTabPane.querySelectorAll(".table-responsive, .table-container");
+    tableContainers.forEach(container => {
+        if (container.scrollHeight > container.clientHeight && (container.scrollTop + container.clientHeight) >= (container.scrollHeight - 150)) {
+            tableScrolledNearBottom = true;
+        }
+    });
+
+    if (windowScrolledNearBottom || tableScrolledNearBottom) {
+        if (tabId === "sleep" && appData.sleep_next_page_token && !appData.sleep_loading) {
+            showToast("Loading more sleep history...");
+            loadMetric("sleep", appData.sleep_next_page_token);
+        } else if (tabId === "heart") {
+            if (appData.rhr_next_page_token && !appData.heart_loading) {
+                showToast("Loading more heart rate history...");
+                loadMetric("rhr", appData.rhr_next_page_token);
+            } else if (appData.hrv_next_page_token && !appData.heart_loading) {
+                showToast("Loading more HRV history...");
+                loadMetric("hrv", appData.hrv_next_page_token);
+            }
+        } else if (tabId === "activity" && appData.activity_next_page_token && !appData.activity_loading) {
+            showToast("Loading more activity history...");
+            loadMetric("activity", appData.activity_next_page_token);
+        }
+    }
+}
+
+window.addEventListener("scroll", checkInfiniteScroll, { passive: true });
+document.addEventListener("scroll", function(e) {
+    if (e.target && e.target.classList && (e.target.classList.contains("table-responsive") || e.target.classList.contains("table-container"))) {
+        checkInfiniteScroll();
+    }
+}, { passive: true, capture: true });
 
 // Chart rendering helpers
 function renderChart(canvasId, config) {

@@ -59,10 +59,14 @@ type ActivityRecord struct {
 
 // Stats Response for the frontend
 type StatsResponse struct {
-	SleepSessions   []SleepSession   `json:"sleep_sessions"`
-	RHRRecords      []RHRRecord      `json:"rhr_records"`
-	HRVRecords      []HRVRecord      `json:"hrv_records"`
-	ActivityRecords []ActivityRecord `json:"activity_records"`
+	SleepSessions         []SleepSession   `json:"sleep_sessions"`
+	SleepNextPageToken    string           `json:"sleep_next_page_token,omitempty"`
+	RHRRecords            []RHRRecord      `json:"rhr_records"`
+	RHRNextPageToken      string           `json:"rhr_next_page_token,omitempty"`
+	HRVRecords            []HRVRecord      `json:"hrv_records"`
+	HRVNextPageToken      string           `json:"hrv_next_page_token,omitempty"`
+	ActivityRecords       []ActivityRecord `json:"activity_records"`
+	ActivityNextPageToken string           `json:"activity_next_page_token,omitempty"`
 }
 
 // Status Response for the frontend

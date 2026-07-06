@@ -61,6 +61,8 @@
                     <a href="/privacy-policy" style="color: var(--text-muted); text-decoration: none; transition: var(--transition-quick);" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">Privacy</a>
                     <span>•</span>
                     <a href="/terms-of-service" style="color: var(--text-muted); text-decoration: none; transition: var(--transition-quick);" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">Terms</a>
+                    <span>•</span>
+                    <a href="https://github.com/Jleagle/pulse" target="_blank" rel="noopener noreferrer" style="color: var(--text-muted); text-decoration: none; transition: var(--transition-quick);" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">GitHub</a>
                 </div>
             </div>
         </aside>
@@ -72,10 +74,15 @@
                     <span class="date-today" id="header-date">Today</span>
                     <h1 id="page-title">Dashboard Overview</h1>
                 </div>
-                <div class="user-badge" id="user-badge-container">
-                    <img id="avatar-img" class="avatar-img" src="" alt="Avatar" style="display: none; width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid var(--color-purple);">
-                    <div class="avatar" id="avatar-badge">G</div>
-                    <span id="user-name">Guest</span>
+                <div style="display: flex; align-items: center; gap: 16px;">
+                    <a href="https://github.com/Jleagle/pulse" target="_blank" rel="noopener noreferrer" class="github-header-btn" title="View on GitHub" style="display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-primary); text-decoration: none; transition: var(--transition-quick);" onmouseover="this.style.background='rgba(255, 255, 255, 0.1)'; this.style.borderColor='var(--color-purple)'" onmouseout="this.style.background='rgba(255, 255, 255, 0.05)'; this.style.borderColor='var(--border-color)'">
+                        <i data-lucide="github" style="width: 20px; height: 20px;"></i>
+                    </a>
+                    <div class="user-badge" id="user-badge-container">
+                        <img id="avatar-img" class="avatar-img" src="" alt="Avatar" style="display: none; width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid var(--color-purple);">
+                        <div class="avatar" id="avatar-badge">G</div>
+                        <span id="user-name">Guest</span>
+                    </div>
                 </div>
             </header>
 
@@ -372,6 +379,13 @@
                                 <div class="env-text" style="display: flex; flex-direction: column;">
                                     <strong style="font-size: 0.95rem;">OAuth 2.0 Client Credentials</strong>
                                     <span style="font-size: 0.85rem; color: var(--text-secondary);" id="oauth-config-status">Checking server configuration...</span>
+                                </div>
+                            </div>
+                            <div class="env-item" style="display: flex; gap: 16px; align-items: center;">
+                                <div class="env-icon" style="width: 44px; height: 44px; border-radius: 12px; background: rgba(255, 255, 255, 0.08); display: flex; align-items: center; justify-content: center;"><i data-lucide="github" style="color: #fff;"></i></div>
+                                <div class="env-text" style="display: flex; flex-direction: column;">
+                                    <strong style="font-size: 0.95rem;">Open Source Repository</strong>
+                                    <span style="font-size: 0.85rem; color: var(--text-secondary);">View source code, report issues, or contribute on <a href="https://github.com/Jleagle/pulse" target="_blank" rel="noopener noreferrer" style="color: var(--color-purple); text-decoration: underline;">GitHub</a>.</span>
                                 </div>
                             </div>
                         </div>
