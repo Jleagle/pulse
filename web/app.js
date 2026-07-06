@@ -278,9 +278,15 @@ async function refreshStatus() {
 // Time Horizon Selector
 function setTimeHorizon(days) {
     currentHorizonDays = days;
-    document.querySelectorAll(".btn-horizon").forEach(btn => btn.classList.remove("active"));
+    document.querySelectorAll(".btn-horizon").forEach(btn => {
+        btn.classList.remove("active", "btn-primary");
+        btn.classList.add("btn-secondary");
+    });
     const activeBtn = document.getElementById("horizon-" + days);
-    if (activeBtn) activeBtn.classList.add("active");
+    if (activeBtn) {
+        activeBtn.classList.add("active", "btn-primary");
+        activeBtn.classList.remove("btn-secondary");
+    }
     
     showToast(`Time horizon set to ${days} days. Refreshing live API metrics...`);
     resetAppData();

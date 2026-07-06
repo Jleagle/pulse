@@ -190,7 +190,7 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	limitStr := r.URL.Query().Get("limit")
 	days := 14 // Default to 14 days of live data for fast page load
 	if limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 90 {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 3650 {
 			days = l
 		}
 	}

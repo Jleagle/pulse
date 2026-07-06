@@ -354,7 +354,7 @@ func (s *StatelessService) fetchSleep(client *http.Client, startStr, pageToken s
 	urlStr := "https://health.googleapis.com/v4/users/me/dataTypes/sleep/dataPoints"
 	u, _ := url.Parse(urlStr)
 	q := u.Query()
-	q.Set("pageSize", "1000")
+	q.Set("pageSize", "50000")
 	if pageToken != "" {
 		q.Set("pageToken", pageToken)
 	}
@@ -448,7 +448,7 @@ func (s *StatelessService) fetchRHR(client *http.Client, startDateStr, pageToken
 	urlStr := "https://health.googleapis.com/v4/users/me/dataTypes/daily-resting-heart-rate/dataPoints"
 	u, _ := url.Parse(urlStr)
 	q := u.Query()
-	q.Set("pageSize", "1000")
+	q.Set("pageSize", "50000")
 	if pageToken != "" {
 		q.Set("pageToken", pageToken)
 	}
@@ -501,7 +501,7 @@ func (s *StatelessService) fetchHRV(client *http.Client, startDateStr, pageToken
 	urlStr := "https://health.googleapis.com/v4/users/me/dataTypes/daily-heart-rate-variability/dataPoints"
 	u, _ := url.Parse(urlStr)
 	q := u.Query()
-	q.Set("pageSize", "1000")
+	q.Set("pageSize", "50000")
 	if pageToken != "" {
 		q.Set("pageToken", pageToken)
 	}
@@ -576,7 +576,7 @@ func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDat
 	stepsURL := "https://health.googleapis.com/v4/users/me/dataTypes/steps/dataPoints"
 	u, _ := url.Parse(stepsURL)
 	q := u.Query()
-	q.Set("pageSize", "1000")
+	q.Set("pageSize", "50000")
 	if pageToken != "" {
 		q.Set("pageToken", pageToken)
 	}
@@ -611,7 +611,7 @@ func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDat
 	energyURL := "https://health.googleapis.com/v4/users/me/dataTypes/active-energy-burned/dataPoints"
 	u2, _ := url.Parse(energyURL)
 	q2 := u2.Query()
-	q2.Set("pageSize", "1000")
+	q2.Set("pageSize", "50000")
 	if pageToken != "" {
 		q2.Set("pageToken", pageToken)
 	}
@@ -643,7 +643,7 @@ func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDat
 	minutesURL := "https://health.googleapis.com/v4/users/me/dataTypes/active-minutes/dataPoints"
 	u3, _ := url.Parse(minutesURL)
 	q3 := u3.Query()
-	q3.Set("pageSize", "1000")
+	q3.Set("pageSize", "50000")
 	if pageToken != "" {
 		q3.Set("pageToken", pageToken)
 	}
