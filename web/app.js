@@ -97,23 +97,38 @@ function loadCache() {
 // Global chart references for disposal
 const activeCharts = {};
 
+// Handle browser back/forward buttons
+window.addEventListener("popstate", () => {
+    const pathTab = window.location.pathname.replace("/", "") || "overview";
+    const validTab = ["overview", "sleep", "heart", "activity", "settings", "privacy-policy", "terms-of-service"].includes(pathTab) ? pathTab : "overview";
+    switchTab(validTab, false);
+});
+
 // On page load
 document.addEventListener("DOMContentLoaded", () => {
-    // Set current date in header
-    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-    document.getElementById("header-date").textContent = new Date().toLocaleDateString('en-US', options);
+    // Set current date in header if element exists
+    const dateEl = document.getElementById("header-date");
+    if (dateEl) {
+        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        dateEl.textContent = new Date().toLocaleDateString('en-US', options);
+    }
 
     // Initialize Lucide icons
     lucide.createIcons();
 
-    // Check query params for notifications
+    // Determine target tab from URL path, query param, or hash
     const urlParams = new URLSearchParams(window.location.search);
+    const pathTab = window.location.pathname.replace("/", "") || urlParams.get("tab") || window.location.hash.replace("#", "");
+    const initialTab = ["overview", "sleep", "heart", "activity", "settings", "privacy-policy", "terms-of-service"].includes(pathTab) ? pathTab : "overview";
+
     if (urlParams.get("connected") === "true") {
         showToast("Connected to Google Health successfully!");
-        window.history.replaceState({}, document.title, "/");
+        window.history.replaceState({}, document.title, initialTab === "overview" ? "/" : `/${initialTab}`);
     } else if (urlParams.get("error")) {
         showToast("Error connecting: " + decodeURIComponent(urlParams.get("error")), true);
-        window.history.replaceState({}, document.title, "/");
+        window.history.replaceState({}, document.title, initialTab === "overview" ? "/" : `/${initialTab}`);
+    } else if (initialTab !== "overview") {
+        switchTab(initialTab, false);
     }
 
     // Load setup
@@ -127,31 +142,53 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // Switch UI Tabs
-function switchTab(tabId) {
+function switchTab(tabId, updateUrl = true) {
     document.querySelectorAll(".tab-pane").forEach(el => el.classList.remove("active"));
     document.querySelectorAll(".nav-item").forEach(el => el.classList.remove("active"));
 
-    document.getElementById("tab-" + tabId).classList.add("active");
-    document.getElementById("nav-btn-" + tabId).classList.add("active");
+    const tabEl = document.getElementById("tab-" + tabId);
+    if (!tabEl) {
+        tabId = "overview";
+        document.getElementById("tab-overview").classList.add("active");
+        document.getElementById("nav-btn-overview").classList.add("active");
+    } else {
+        tabEl.classList.add("active");
+        const navEl = document.getElementById("nav-btn-" + tabId);
+        if (navEl) navEl.classList.add("active");
+    }
+
+    if (updateUrl && window.history && window.history.pushState) {
+        const newPath = tabId === "overview" ? "/" : `/${tabId}`;
+        if (window.location.pathname !== newPath) {
+            window.history.pushState({ tab: tabId }, "", newPath);
+        }
+    }
 
     const titles = {
         overview: "Dashboard Overview",
         sleep: "Sleep Analysis",
         heart: "Heart Health Trends",
         activity: "Activity & Energy",
-        settings: "Application Settings"
+        settings: "Application Settings",
+        "privacy-policy": "Privacy Policy",
+        "terms-of-service": "Terms of Service"
     };
-    document.getElementById("page-title").textContent = titles[tabId] || "Dashboard";
+    const titleEl = document.getElementById("page-title");
+    if (titleEl) titleEl.textContent = titles[tabId] || "Dashboard";
 
-    if (appStatus.oauth_connected) {
-        if (tabId === "sleep" && !appData.sleep_loaded && !appData.sleep_loading) {
-            loadMetric("sleep");
-        } else if (tabId === "heart" && !appData.heart_loaded && !appData.heart_loading) {
-            loadMetric("heart");
-        } else if (tabId === "activity" && !appData.activity_loaded && !appData.activity_loading) {
-            loadMetric("activity");
-        } else if (tabId === "overview" && !appData.overview_loaded) {
-            loadMetric("overview");
+    if (appStatus.oauth_connected || loadCache()) {
+        if (tabId === "sleep") {
+            if (!appData.sleep_loaded && !appData.sleep_loading) loadMetric("sleep");
+            else if (appData.sleep_loaded) renderSleepCharts({ sleep_sessions: appData.sleep_sessions });
+        } else if (tabId === "heart") {
+            if (!appData.heart_loaded && !appData.heart_loading) loadMetric("heart");
+            else if (appData.heart_loaded) renderHeartCharts({ rhr_records: appData.rhr_records, hrv_records: appData.hrv_records });
+        } else if (tabId === "activity") {
+            if (!appData.activity_loaded && !appData.activity_loading) loadMetric("activity");
+            else if (appData.activity_loaded) renderActivityCharts({ activity_records: appData.activity_records });
+        } else if (tabId === "overview") {
+            if (!appData.overview_loaded) loadMetric("overview");
+            else renderOverviewCharts(appData);
         }
     }
 }
@@ -327,8 +364,7 @@ async function loadStats(forceRefresh = false) {
             renderSleepCharts({ sleep_sessions: appData.sleep_sessions });
         }
         if (appData.heart_loaded) {
-            populateRHRTable(appData.rhr_records);
-            populateHRVTable(appData.hrv_records);
+            populateHeartTable(appData.rhr_records, appData.hrv_records);
             renderHeartCharts({ rhr_records: appData.rhr_records, hrv_records: appData.hrv_records });
         }
         if (appData.activity_loaded) {
@@ -390,8 +426,7 @@ async function loadMetric(metric, pageToken = "") {
                 appData.hrv_records = data.hrv_records || [];
                 appData.hrv_next_page_token = data.hrv_next_page_token || "";
                 appData.heart_loaded = true;
-                populateRHRTable(appData.rhr_records);
-                populateHRVTable(appData.hrv_records);
+                populateHeartTable(appData.rhr_records, appData.hrv_records);
                 renderHeartCharts({ rhr_records: appData.rhr_records, hrv_records: appData.hrv_records });
             }
             if (!appData.activity_loaded) {
@@ -419,7 +454,6 @@ async function loadMetric(metric, pageToken = "") {
                     appData.rhr_records = data.rhr_records || [];
                 }
                 appData.rhr_next_page_token = data.rhr_next_page_token || "";
-                populateRHRTable(appData.rhr_records);
             }
             if (metric === "heart" || metric === "hrv") {
                 if (pageToken && metric === "hrv") {
@@ -428,8 +462,8 @@ async function loadMetric(metric, pageToken = "") {
                     appData.hrv_records = data.hrv_records || [];
                 }
                 appData.hrv_next_page_token = data.hrv_next_page_token || "";
-                populateHRVTable(appData.hrv_records);
             }
+            populateHeartTable(appData.rhr_records, appData.hrv_records);
             appData.heart_loaded = true;
             renderHeartCharts({ rhr_records: appData.rhr_records, hrv_records: appData.hrv_records });
         } else if (metric === "activity") {
@@ -453,8 +487,7 @@ async function loadMetric(metric, pageToken = "") {
 
 function populateTables(data) {
     populateSleepTable(data.sleep_sessions || []);
-    populateRHRTable(data.rhr_records || []);
-    populateHRVTable(data.hrv_records || []);
+    populateHeartTable(data.rhr_records || [], data.hrv_records || []);
     populateActivityTable(data.activity_records || []);
 }
 
@@ -488,43 +521,45 @@ function populateSleepTable(sessions) {
     }
 }
 
-function populateRHRTable(records) {
-    const rhrTbody = document.querySelector("#rhr-history-table tbody");
-    if (!rhrTbody) return;
-    rhrTbody.innerHTML = "";
-    if (records && records.length > 0) {
-        records.forEach(r => {
-            const tr = document.createElement("tr");
-            tr.innerHTML = `
-                <td>${r.date}</td>
-                <td><strong>${r.beats_per_minute}</strong> BPM</td>
-            `;
-            rhrTbody.appendChild(tr);
-        });
-    } else {
-        rhrTbody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
-    }
-}
+function populateHeartTable(rhrRecords, hrvRecords) {
+    const tbody = document.querySelector("#heart-history-table tbody");
+    if (!tbody) return;
+    tbody.innerHTML = "";
 
-function populateHRVTable(records) {
-    const hrvTbody = document.querySelector("#hrv-history-table tbody");
-    if (!hrvTbody) return;
-    hrvTbody.innerHTML = "";
-    if (records && records.length > 0) {
-        records.forEach(r => {
+    const rhrMap = {};
+    (rhrRecords || []).forEach(r => rhrMap[r.date] = r);
+    const hrvMap = {};
+    (hrvRecords || []).forEach(r => hrvMap[r.date] = r);
+
+    const dates = Array.from(new Set([
+        ...Object.keys(rhrMap),
+        ...Object.keys(hrvMap)
+    ])).sort().reverse();
+
+    if (dates.length > 0) {
+        dates.forEach(d => {
+            const rhr = rhrMap[d];
+            const hrv = hrvMap[d];
             const tr = document.createElement("tr");
-            const deepVal = r.deep_sleep_rmssd ? `${Math.round(r.deep_sleep_rmssd)} ms` : "--";
-            const entropyVal = r.entropy ? r.entropy.toFixed(2) : "--";
+            const rhrVal = rhr ? `<strong>${rhr.beats_per_minute}</strong> BPM` : "--";
+            const hrvVal = hrv ? `<strong>${Math.round(hrv.avg_hrv_ms)}</strong> ms` : "--";
+            const deepVal = (hrv && hrv.deep_sleep_rmssd) ? `${Math.round(hrv.deep_sleep_rmssd)} ms` : "--";
+            
+            let status = `<span class="badge badge-normal">Normal</span>`;
+            if (rhr && rhr.beats_per_minute > 80) status = `<span class="badge badge-warning">Elevated RHR</span>`;
+            else if (hrv && hrv.avg_hrv_ms > 60) status = `<span class="badge badge-optimal">Optimal HRV</span>`;
+
             tr.innerHTML = `
-                <td>${r.date}</td>
-                <td><strong>${Math.round(r.avg_hrv_ms)}</strong> ms</td>
-                <td>${entropyVal}</td>
+                <td>${d}</td>
+                <td>${rhrVal}</td>
+                <td>${hrvVal}</td>
                 <td>${deepVal}</td>
+                <td>${status}</td>
             `;
-            hrvTbody.appendChild(tr);
+            tbody.appendChild(tr);
         });
     } else {
-        hrvTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
     }
 }
 
@@ -592,126 +627,118 @@ document.addEventListener("scroll", function(e) {
 
 // Chart rendering helpers
 function renderChart(canvasId, config) {
+    const el = document.getElementById(canvasId);
+    if (!el) {
+        console.warn(`Canvas element with ID '${canvasId}' not found.`);
+        return;
+    }
     if (activeCharts[canvasId]) {
         activeCharts[canvasId].destroy();
     }
-    const ctx = document.getElementById(canvasId).getContext("2d");
+    const ctx = el.getContext("2d");
     activeCharts[canvasId] = new Chart(ctx, config);
 }
 
 function renderOverviewCharts(data) {
-    if (!data.activity_records || data.activity_records.length === 0) return;
-
-    // Last 7 days for weekly preview (reversed because DB query is DESC)
-    const recentAct = [...data.activity_records].slice(0, 7).reverse();
-    const labels = recentAct.map(a => new Date(a.date).toLocaleDateString([], { weekday: 'short', day: 'numeric' }));
-    const stepsData = recentAct.map(a => a.steps);
-    const caloriesData = recentAct.map(a => a.calories_burned);
-
-    // Weekly Summary Chart (dual-axis)
-    renderChart("chart-weekly-summary", {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [
-                {
-                    label: 'Steps',
-                    data: stepsData,
-                    backgroundColor: 'rgba(52, 211, 153, 0.4)',
-                    borderColor: '#34d399',
-                    borderWidth: 2,
-                    borderRadius: 6,
-                    yAxisID: 'y'
-                },
-                {
-                    label: 'Active Calories (kcal)',
-                    data: caloriesData,
-                    type: 'line',
-                    borderColor: '#f43f5e',
-                    borderWidth: 3,
-                    pointBackgroundColor: '#f43f5e',
-                    tension: 0.35,
-                    fill: false,
-                    yAxisID: 'y1'
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { labels: { color: '#94a3b8', font: { family: 'Plus Jakarta Sans' } } }
-            },
-            scales: {
-                x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } },
-                y: {
-                    type: 'linear',
-                    position: 'left',
-                    grid: { color: 'rgba(255,255,255,0.03)' },
-                    ticks: { color: '#94a3b8' },
-                    title: { display: true, text: 'Steps', color: '#34d399' }
-                },
-                y1: {
-                    type: 'linear',
-                    position: 'right',
-                    grid: { drawOnChartArea: false },
-                    ticks: { color: '#94a3b8' },
-                    title: { display: true, text: 'Calories (kcal)', color: '#f43f5e' }
-                }
-            }
-        }
-    });
-
-    // Sleep stages ratio (pie/donut chart) for the last night
+    // 1. Sleep Duration Trend on Overview
     if (data.sleep_sessions && data.sleep_sessions.length > 0) {
-        const lastSleep = data.sleep_sessions[0];
-        
-        let rem = 0, deep = 0, light = 0, awake = 0;
-        
-        if (lastSleep.stages && lastSleep.stages.length > 0) {
-            lastSleep.stages.forEach(st => {
-                const dur = st.duration_minutes;
-                switch (st.stage_type) {
-                    case "REM": rem += dur; break;
-                    case "DEEP": deep += dur; break;
-                    case "LIGHT": case "ASLEEP": light += dur; break;
-                    case "AWAKE": case "RESTLESS": awake += dur; break;
-                }
-            });
-        } else {
-            // Estimate based on classic splits if no stages
-            rem = Math.round(lastSleep.minutes_asleep * 0.20);
-            deep = Math.round(lastSleep.minutes_asleep * 0.15);
-            light = lastSleep.minutes_asleep - rem - deep;
-            awake = lastSleep.minutes_awake;
-        }
-
-        renderChart("chart-sleep-ratio", {
-            type: 'doughnut',
+        const recentSleeps = [...data.sleep_sessions].slice(0, 14).reverse();
+        const dates = recentSleeps.map(s => new Date(s.start_time).toLocaleDateString([], { month: 'short', day: 'numeric' }));
+        renderChart("chart-overview-sleep", {
+            type: 'line',
             data: {
-                labels: ['Deep', 'REM', 'Light', 'Awake'],
-                datasets: [{
-                    data: [deep, rem, light, awake],
-                    backgroundColor: [
-                        '#c084fc', // Deep
-                        '#38bdf8', // REM
-                        '#818cf8', // Light
-                        '#f43f5e'  // Awake
-                    ],
-                    borderWidth: 0,
-                    hoverOffset: 4
-                }]
+                labels: dates,
+                datasets: [
+                    {
+                        label: 'Minutes Asleep',
+                        data: recentSleeps.map(s => s.minutes_asleep),
+                        borderColor: '#c084fc',
+                        backgroundColor: 'rgba(192, 132, 252, 0.05)',
+                        tension: 0.35,
+                        fill: true,
+                        borderWidth: 3,
+                    },
+                    {
+                        label: 'Minutes Awake',
+                        data: recentSleeps.map(s => s.minutes_awake),
+                        borderColor: '#f43f5e',
+                        backgroundColor: 'rgba(244, 63, 94, 0.05)',
+                        tension: 0.35,
+                        fill: true,
+                        borderWidth: 2,
+                    }
+                ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: { color: '#94a3b8', boxWidth: 12, padding: 16 }
+                plugins: { legend: { labels: { color: '#94a3b8' } } },
+                scales: {
+                    x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } },
+                    y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' }, title: { display: true, text: 'Minutes', color: '#94a3b8' } }
+                }
+            }
+        });
+    }
+
+    // 2. Heart Recovery Trend on Overview
+    if ((data.rhr_records && data.rhr_records.length > 0) || (data.hrv_records && data.hrv_records.length > 0)) {
+        const rhrMap = {};
+        (data.rhr_records || []).forEach(r => rhrMap[r.date] = r.beats_per_minute);
+        const hrvMap = {};
+        (data.hrv_records || []).forEach(r => hrvMap[r.date] = r.avg_hrv_ms);
+
+        const dates = Array.from(new Set([
+            ...(data.rhr_records || []).map(r => r.date),
+            ...(data.hrv_records || []).map(r => r.date)
+        ])).sort().slice(-14);
+
+        const labels = dates.map(d => new Date(d).toLocaleDateString([], { month: 'short', day: 'numeric' }));
+        const rhrPoints = dates.map(d => rhrMap[d] || null);
+        const hrvPoints = dates.map(d => hrvMap[d] || null);
+
+        renderChart("chart-overview-heart", {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'HRV (ms)',
+                        data: hrvPoints,
+                        borderColor: '#38bdf8',
+                        pointBackgroundColor: '#38bdf8',
+                        borderWidth: 3,
+                        tension: 0.3,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: 'RHR (BPM)',
+                        data: rhrPoints,
+                        borderColor: '#f43f5e',
+                        pointBackgroundColor: '#f43f5e',
+                        borderWidth: 3,
+                        tension: 0.3,
+                        yAxisID: 'y1'
                     }
-                },
-                cutout: '70%'
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: '#94a3b8' } } },
+                scales: {
+                    x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } },
+                    y: {
+                        type: 'linear', position: 'left',
+                        grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' },
+                        title: { display: true, text: 'HRV (ms)', color: '#38bdf8' }
+                    },
+                    y1: {
+                        type: 'linear', position: 'right',
+                        grid: { drawOnChartArea: false }, ticks: { color: '#94a3b8' },
+                        title: { display: true, text: 'RHR (BPM)', color: '#f43f5e' }
+                    }
+                }
             }
         });
     }
@@ -815,74 +842,67 @@ function renderSleepCharts(data) {
 }
 
 function renderHeartCharts(data) {
-    if (!data.rhr_records || data.rhr_records.length === 0) return;
+    if ((!data.rhr_records || data.rhr_records.length === 0) && (!data.hrv_records || data.hrv_records.length === 0)) return;
 
-    // Use union of dates for Heart Rate correlation
-    // Get RHR records & HRV records over past 30 days
-    const rhrMap = {};
-    data.rhr_records.forEach(r => rhrMap[r.date] = r.beats_per_minute);
-
-    const hrvMap = {};
-    data.hrv_records.forEach(r => hrvMap[r.date] = r.avg_hrv_ms);
-
-    // Gather unique dates seen, sorted ascending
-    const dates = Array.from(new Set([
-        ...data.rhr_records.map(r => r.date),
-        ...data.hrv_records.map(r => r.date)
-    ])).sort().slice(-14); // Limit to last 14 dates
-
-    const labels = dates.map(d => new Date(d).toLocaleDateString([], { month: 'short', day: 'numeric' }));
-    const rhrPoints = dates.map(d => rhrMap[d] || null);
-    const hrvPoints = dates.map(d => hrvMap[d] || null);
-
-    renderChart("chart-heart-trends", {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [
-                {
-                    label: 'Heart Rate Variability (ms)',
-                    data: hrvPoints,
+    // 1. HRV Chart
+    if (data.hrv_records && data.hrv_records.length > 0) {
+        const hrvDates = [...data.hrv_records].slice(0, 14).reverse();
+        renderChart("chart-hrv", {
+            type: 'line',
+            data: {
+                labels: hrvDates.map(r => new Date(r.date).toLocaleDateString([], { month: 'short', day: 'numeric' })),
+                datasets: [{
+                    label: 'HRV (ms)',
+                    data: hrvDates.map(r => Math.round(r.avg_hrv_ms)),
                     borderColor: '#38bdf8',
+                    backgroundColor: 'rgba(56, 189, 248, 0.05)',
+                    borderWidth: 3,
                     pointBackgroundColor: '#38bdf8',
-                    borderWidth: 3,
                     tension: 0.3,
-                    yAxisID: 'y'
-                },
-                {
-                    label: 'Resting Heart Rate (BPM)',
-                    data: rhrPoints,
-                    borderColor: '#f43f5e',
-                    pointBackgroundColor: '#f43f5e',
-                    borderWidth: 3,
-                    tension: 0.3,
-                    yAxisID: 'y1'
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { labels: { color: '#94a3b8' } } },
-            scales: {
-                x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } },
-                y: {
-                    type: 'linear',
-                    position: 'left',
-                    grid: { color: 'rgba(255,255,255,0.03)' },
-                    ticks: { color: '#94a3b8' },
-                    title: { display: true, text: 'HRV (ms)', color: '#38bdf8' }
-                },
-                y1: {
-                    type: 'linear',
-                    position: 'right',
-                    grid: { drawOnChartArea: false },
-                    ticks: { color: '#94a3b8' },
-                    title: { display: true, text: 'RHR (BPM)', color: '#f43f5e' }
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } },
+                    y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' }, title: { display: true, text: 'ms', color: '#38bdf8' } }
                 }
             }
-        }
-    });
+        });
+    }
+
+    // 2. RHR Chart
+    if (data.rhr_records && data.rhr_records.length > 0) {
+        const rhrDates = [...data.rhr_records].slice(0, 14).reverse();
+        renderChart("chart-rhr", {
+            type: 'line',
+            data: {
+                labels: rhrDates.map(r => new Date(r.date).toLocaleDateString([], { month: 'short', day: 'numeric' })),
+                datasets: [{
+                    label: 'Resting Heart Rate (BPM)',
+                    data: rhrDates.map(r => r.beats_per_minute),
+                    borderColor: '#f43f5e',
+                    backgroundColor: 'rgba(244, 63, 94, 0.05)',
+                    borderWidth: 3,
+                    pointBackgroundColor: '#f43f5e',
+                    tension: 0.3,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } },
+                    y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' }, title: { display: true, text: 'BPM', color: '#f43f5e' } }
+                }
+            }
+        });
+    }
 }
 
 function renderActivityCharts(data) {
@@ -892,7 +912,7 @@ function renderActivityCharts(data) {
     const dates = recentAct.map(a => new Date(a.date).toLocaleDateString([], { month: 'short', day: 'numeric' }));
 
     // Chart 1: Steps Trend
-    renderChart("chart-activity-steps", {
+    renderChart("chart-steps", {
         type: 'bar',
         data: {
             labels: dates,
@@ -917,7 +937,7 @@ function renderActivityCharts(data) {
     });
 
     // Chart 2: Calories burned
-    renderChart("chart-activity-energy", {
+    renderChart("chart-calories", {
         type: 'bar',
         data: {
             labels: dates,
