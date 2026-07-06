@@ -58,9 +58,9 @@
                     <i data-lucide="refresh-cw" id="sidebar-sync-icon"></i> Live Refresh
                 </button>
                 <div class="sidebar-legal-links" style="display: flex; justify-content: space-between; font-size: 0.75rem; padding: 6px 4px 0; color: var(--text-muted); border-top: 1px dashed var(--border-color); margin-top: 4px;">
-                    <a href="/privacy-policy" style="color: var(--text-muted); text-decoration: none; transition: var(--transition-quick);" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">Privacy</a>
+                    <a href="/privacy-policy" onclick="event.preventDefault(); switchTab('privacy-policy');" style="color: var(--text-muted); text-decoration: none; transition: var(--transition-quick);" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">Privacy</a>
                     <span>•</span>
-                    <a href="/terms-of-service" style="color: var(--text-muted); text-decoration: none; transition: var(--transition-quick);" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">Terms</a>
+                    <a href="/terms-of-service" onclick="event.preventDefault(); switchTab('terms-of-service');" style="color: var(--text-muted); text-decoration: none; transition: var(--transition-quick);" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">Terms</a>
                     <span>•</span>
                     <a href="https://github.com/Jleagle/pulse" target="_blank" rel="noopener noreferrer" style="color: var(--text-muted); text-decoration: none; transition: var(--transition-quick);" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">GitHub</a>
                 </div>
@@ -71,18 +71,12 @@
         <main class="main-content">
             <header class="top-header">
                 <div class="header-title">
-                    <span class="date-today" id="header-date">Today</span>
                     <h1 id="page-title">Dashboard Overview</h1>
                 </div>
-                <div style="display: flex; align-items: center; gap: 16px;">
-                    <a href="https://github.com/Jleagle/pulse" target="_blank" rel="noopener noreferrer" class="github-header-btn" title="View on GitHub" style="display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-primary); text-decoration: none; transition: var(--transition-quick);" onmouseover="this.style.background='rgba(255, 255, 255, 0.1)'; this.style.borderColor='var(--color-purple)'" onmouseout="this.style.background='rgba(255, 255, 255, 0.05)'; this.style.borderColor='var(--border-color)'">
-                        <i data-lucide="github" style="width: 20px; height: 20px;"></i>
-                    </a>
-                    <div class="user-badge" id="user-badge-container">
-                        <img id="avatar-img" class="avatar-img" src="" alt="Avatar" style="display: none; width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid var(--color-purple);">
-                        <div class="avatar" id="avatar-badge">G</div>
-                        <span id="user-name">Guest</span>
-                    </div>
+                <div class="user-badge" id="user-badge-container">
+                    <img id="avatar-img" class="avatar-img" src="" alt="Avatar" style="display: none; width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid var(--color-purple);">
+                    <div class="avatar" id="avatar-badge">G</div>
+                    <span id="user-name">Guest</span>
                 </div>
             </header>
 
@@ -188,15 +182,29 @@
 
             <!-- TAB: SLEEP ANALYSIS -->
             <section id="tab-sleep" class="tab-pane">
-                <div class="chart-panel glass-panel mb-6">
-                    <div class="chart-header">
-                        <div>
-                            <h3>Sleep Stages Breakdown</h3>
-                            <p class="chart-subtitle">Deep, REM, Light, and Awake durations over time</p>
+                <div class="dashboard-charts-grid mb-6">
+                    <div class="chart-panel glass-panel">
+                        <div class="chart-header">
+                            <div>
+                                <h3>Sleep Duration Trend</h3>
+                                <p class="chart-subtitle">Total sleep period vs time asleep</p>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="chart-sleep-durations"></canvas>
                         </div>
                     </div>
-                    <div class="chart-container chart-tall">
-                        <canvas id="chart-sleep-stages"></canvas>
+
+                    <div class="chart-panel glass-panel">
+                        <div class="chart-header">
+                            <div>
+                                <h3>Sleep Stages Breakdown</h3>
+                                <p class="chart-subtitle">Deep, REM, Light, and Awake durations</p>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="chart-sleep-stages"></canvas>
+                        </div>
                     </div>
                 </div>
 
@@ -254,46 +262,25 @@
                     </div>
                 </div>
 
-                <div class="tables-split-grid">
-                    <div class="table-panel glass-panel">
-                        <div class="table-header">
-                            <h3>HRV History</h3>
-                        </div>
-                        <div class="table-responsive">
-                            <table class="data-table" id="hrv-history-table">
-                                <thead>
-                                    <tr>
-                                        <th>Date</th>
-                                        <th>Avg HRV</th>
-                                        <th>Deep Sleep RMSSD</th>
-                                        <th>Entropy</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
+                <div class="table-panel glass-panel">
+                    <div class="table-header">
+                        <h3>Heart Vitals History</h3>
                     </div>
-
-                    <div class="table-panel glass-panel">
-                        <div class="table-header">
-                            <h3>RHR History</h3>
-                        </div>
-                        <div class="table-responsive">
-                            <table class="data-table" id="rhr-history-table">
-                                <thead>
-                                    <tr>
-                                        <th>Date</th>
-                                        <th>Beats Per Minute</th>
-                                        <th>Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr><td colspan="3" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
+                    <div class="table-responsive">
+                        <table class="data-table" id="heart-history-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Resting Heart Rate (RHR)</th>
+                                    <th>Avg HRV</th>
+                                    <th>Deep Sleep RMSSD</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </section>
@@ -352,40 +339,19 @@
             <!-- TAB: SETTINGS -->
             <section id="tab-settings" class="tab-pane">
                 <div class="settings-grid">
-                    <!-- Hosted Environment Status -->
+                    <!-- Privacy & Data Storage -->
                     <div class="settings-panel glass-panel">
                         <div class="panel-header border-bottom">
-                            <h3>Hosted Environment Architecture</h3>
-                            <p class="panel-subtitle">This instance of Pulse is running in stateless SaaS mode.</p>
+                            <h3>Privacy & Data Storage</h3>
+                            <p class="panel-subtitle">How Pulse manages your personal health data.</p>
                         </div>
                         
                         <div class="env-info-list" style="padding: 20px 0; display: flex; flex-direction: column; gap: 20px;">
                             <div class="env-item" style="display: flex; gap: 16px; align-items: center;">
-                                <div class="env-icon" style="width: 44px; height: 44px; border-radius: 12px; background: rgba(192, 132, 252, 0.1); display: flex; align-items: center; justify-content: center;"><i data-lucide="cpu" class="icon-purple"></i></div>
-                                <div class="env-text" style="display: flex; flex-direction: column;">
-                                    <strong style="font-size: 0.95rem;">100% In-Memory Runtime Mode</strong>
-                                    <span style="font-size: 0.85rem; color: var(--text-secondary);">Live HTTP fetching directly from Google Health API.</span>
-                                </div>
-                            </div>
-                            <div class="env-item" style="display: flex; gap: 16px; align-items: center;">
                                 <div class="env-icon" style="width: 44px; height: 44px; border-radius: 12px; background: rgba(52, 211, 153, 0.1); display: flex; align-items: center; justify-content: center;"><i data-lucide="shield" class="icon-emerald"></i></div>
                                 <div class="env-text" style="display: flex; flex-direction: column;">
-                                    <strong style="font-size: 0.95rem;">Zero Storage Privacy Guarantee</strong>
-                                    <span style="font-size: 0.85rem; color: var(--text-secondary);">No metrics, sleep sessions, or heart data are ever saved to disk or database.</span>
-                                </div>
-                            </div>
-                            <div class="env-item" style="display: flex; gap: 16px; align-items: center;">
-                                <div class="env-icon" style="width: 44px; height: 44px; border-radius: 12px; background: rgba(56, 189, 248, 0.1); display: flex; align-items: center; justify-content: center;"><i data-lucide="key" class="icon-blue"></i></div>
-                                <div class="env-text" style="display: flex; flex-direction: column;">
-                                    <strong style="font-size: 0.95rem;">OAuth 2.0 Client Credentials</strong>
-                                    <span style="font-size: 0.85rem; color: var(--text-secondary);" id="oauth-config-status">Checking server configuration...</span>
-                                </div>
-                            </div>
-                            <div class="env-item" style="display: flex; gap: 16px; align-items: center;">
-                                <div class="env-icon" style="width: 44px; height: 44px; border-radius: 12px; background: rgba(255, 255, 255, 0.08); display: flex; align-items: center; justify-content: center;"><i data-lucide="github" style="color: #fff;"></i></div>
-                                <div class="env-text" style="display: flex; flex-direction: column;">
-                                    <strong style="font-size: 0.95rem;">Open Source Repository</strong>
-                                    <span style="font-size: 0.85rem; color: var(--text-secondary);">View source code, report issues, or contribute on <a href="https://github.com/Jleagle/pulse" target="_blank" rel="noopener noreferrer" style="color: var(--color-purple); text-decoration: underline;">GitHub</a>.</span>
+                                    <strong style="font-size: 0.95rem;">100% Private & Zero Storage Guarantee</strong>
+                                    <span style="font-size: 0.85rem; color: var(--text-secondary);">Nothing at all is stored on our servers. Your health metrics, sleep sessions, and heart rate records are fetched live from Google Health and processed entirely in memory during your active browser session. Once you close your tab or sign out, no trace of your data remains.</span>
                                 </div>
                             </div>
                         </div>
@@ -426,7 +392,7 @@
                                 <span>Connect Google Health</span>
                             </button>
                             <div style="margin-top: 12px; font-size: 0.8rem; color: var(--text-muted);">
-                                View our <a href="/privacy-policy" style="color: var(--text-secondary); text-decoration: underline;">Privacy Policy</a> & <a href="/terms-of-service" style="color: var(--text-secondary); text-decoration: underline;">Terms of Service</a>.
+                                View our <a href="/privacy-policy" onclick="event.preventDefault(); switchTab('privacy-policy');" style="color: var(--text-secondary); text-decoration: underline;">Privacy Policy</a> & <a href="/terms-of-service" onclick="event.preventDefault(); switchTab('terms-of-service');" style="color: var(--text-secondary); text-decoration: underline;">Terms of Service</a>.
                             </div>
                         </div>
 
@@ -454,6 +420,61 @@
                                 </button>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: PRIVACY POLICY -->
+            <section id="tab-privacy-policy" class="tab-pane">
+                <div class="glass-panel" style="padding: 32px; max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px;">
+                    <div style="display: flex; align-items: center; gap: 12px; color: var(--color-purple);">
+                        <i data-lucide="shield-check" style="width: 24px; height: 24px;"></i>
+                        <span style="font-weight: 600; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.5px;">Google OAuth Verification Compliant</span>
+                    </div>
+                    <h2 style="font-size: 1.8rem; margin: 0;">Privacy Policy</h2>
+                    <p style="color: var(--text-secondary); line-height: 1.7; margin: 0;">At Pulse, your personal health privacy is our highest priority. We engineered a 100% stateless architecture to ensure your sensitive Google Health metrics remain under your absolute control and are never stored in databases or shared with third parties.</p>
+                    
+                    <div style="border-top: 1px solid var(--border-color); padding-top: 20px;">
+                        <h3 style="margin: 0 0 8px; font-size: 1.15rem; color: var(--text-primary);">1. 100% Private & Stateless Guarantee</h3>
+                        <p style="color: var(--text-secondary); line-height: 1.7; margin: 0;">No databases, hard drives, or cloud data lakes. Your health metrics are processed entirely in temporary server memory during your active browser session. Once you close your tab or sign out, no trace of your data remains.</p>
+                    </div>
+
+                    <div style="border-top: 1px solid var(--border-color); padding-top: 20px;">
+                        <h3 style="margin: 0 0 8px; font-size: 1.15rem; color: var(--text-primary);">2. Zero Data Selling & Limited Use</h3>
+                        <p style="color: var(--text-secondary); line-height: 1.7; margin: 0;">We never sell, rent, monetize, or share your Google user data with advertisers, data brokers, or AI training models. Pulse adheres strictly to the Google API Services User Data Policy, including Limited Use requirements.</p>
+                    </div>
+
+                    <div style="border-top: 1px solid var(--border-color); padding-top: 20px;">
+                        <h3 style="margin: 0 0 8px; font-size: 1.15rem; color: var(--text-primary);">3. OAuth Scopes Requested</h3>
+                        <p style="color: var(--text-secondary); line-height: 1.7; margin: 0;">We request read-only scopes strictly to generate your visual charts: <code>googlehealth.sleep.readonly</code>, <code>googlehealth.health_metrics_and_measurements.readonly</code>, <code>googlehealth.activity_and_fitness.readonly</code>, and standard profile/email identity scopes.</p>
+                    </div>
+
+                    <div style="border-top: 1px solid var(--border-color); padding-top: 20px;">
+                        <h3 style="margin: 0 0 8px; font-size: 1.15rem; color: var(--text-primary);">4. Instant Revocation</h3>
+                        <p style="color: var(--text-secondary); line-height: 1.7; margin: 0;">Disconnecting from your dashboard or revoking permissions via your Google Security settings immediately invalidates all OAuth tokens.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: TERMS OF SERVICE -->
+            <section id="tab-terms-of-service" class="tab-pane">
+                <div class="glass-panel" style="padding: 32px; max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px;">
+                    <h2 style="font-size: 1.8rem; margin: 0;">Terms of Service</h2>
+                    <p style="color: var(--text-secondary); line-height: 1.7; margin: 0;">By accessing or using Pulse, you agree to be bound by these Terms of Service.</p>
+                    
+                    <div style="border-top: 1px solid var(--border-color); padding-top: 20px;">
+                        <h3 style="margin: 0 0 8px; font-size: 1.15rem; color: var(--text-primary);">1. Educational & Informational Use Only</h3>
+                        <p style="color: var(--text-secondary); line-height: 1.7; margin: 0;">Pulse is a visualization tool designed solely for personal wellness tracking and educational purposes. It is <strong>not a medical device</strong> and does not provide medical advice, diagnosis, or treatment. Always seek the advice of your physician or qualified health provider with any questions regarding a medical condition.</p>
+                    </div>
+
+                    <div style="border-top: 1px solid var(--border-color); padding-top: 20px;">
+                        <h3 style="margin: 0 0 8px; font-size: 1.15rem; color: var(--text-primary);">2. Stateless Service & Availability</h3>
+                        <p style="color: var(--text-secondary); line-height: 1.7; margin: 0;">Because Pulse operates in a 100% stateless environment without local storage, service continuity depends on Google Health API availability and your active OAuth tokens. We are not responsible for third-party API rate limits or downtime.</p>
+                    </div>
+
+                    <div style="border-top: 1px solid var(--border-color); padding-top: 20px;">
+                        <h3 style="margin: 0 0 8px; font-size: 1.15rem; color: var(--text-primary);">3. Account Security</h3>
+                        <p style="color: var(--text-secondary); line-height: 1.7; margin: 0;">You are responsible for maintaining the confidentiality of your Google account credentials. You can terminate your session or revoke access at any time.</p>
                     </div>
                 </div>
             </section>

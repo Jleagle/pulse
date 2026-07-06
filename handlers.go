@@ -44,13 +44,13 @@ func (s *Server) Routes() http.Handler {
 		panic(err)
 	}
 
-	// Legal & OAuth compliance pages
-	mux.HandleFunc("GET /privacy-policy", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, subFS, "privacy-policy.html")
-	})
-	mux.HandleFunc("GET /terms-of-service", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, subFS, "terms-of-service.html")
-	})
+	// SPA tab routing so page refreshes and links work cleanly
+	for _, tab := range []string{"overview", "sleep", "heart", "activity", "settings", "privacy-policy", "terms-of-service"} {
+		tabName := tab
+		mux.HandleFunc("GET /"+tabName, func(w http.ResponseWriter, r *http.Request) {
+			http.ServeFileFS(w, r, subFS, "index.html")
+		})
+	}
 
 	mux.Handle("/", http.FileServer(http.FS(subFS)))
 
