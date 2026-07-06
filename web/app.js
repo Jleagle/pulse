@@ -6,8 +6,7 @@ let appStatus = {
     user_name: "",
     user_picture: ""
 };
-
-let currentHorizonDays = 14;
+let currentHorizonDays = 3650; // Query maximum allowed history by default
 
 let appData = {
     overview_loaded: false,
@@ -136,7 +135,8 @@ document.addEventListener("DOMContentLoaded", () => {
         if (appStatus.oauth_connected) {
             loadStats();
         } else {
-            showToast("Welcome! Please connect your Google Health account to begin.", false);
+            showToast("Previewing sample health metrics in Guest Mode. Click Guest icon or Settings to login!", false);
+            loadStats();
         }
     });
 });
@@ -176,7 +176,7 @@ function switchTab(tabId, updateUrl = true) {
     const titleEl = document.getElementById("page-title");
     if (titleEl) titleEl.textContent = titles[tabId] || "Dashboard";
 
-    if (appStatus.oauth_connected || loadCache()) {
+    if (true) {
         if (tabId === "sleep") {
             if (!appData.sleep_loaded && !appData.sleep_loading) loadMetric("sleep");
             else if (appData.sleep_loaded) renderSleepCharts({ sleep_sessions: appData.sleep_sessions });
@@ -261,7 +261,7 @@ async function refreshStatus() {
 
             if (welcomeHero) welcomeHero.style.display = "block";
 
-            btnGoogle.disabled = !appStatus.client_configured;
+            if (btnGoogle) btnGoogle.disabled = false;
 
             userNameEl.textContent = "Guest";
             avatarImg.style.display = "none";
@@ -275,33 +275,19 @@ async function refreshStatus() {
     }
 }
 
-// Time Horizon Selector
-function setTimeHorizon(days) {
-    currentHorizonDays = days;
-    document.querySelectorAll(".btn-horizon").forEach(btn => {
-        btn.classList.remove("active", "btn-primary");
-        btn.classList.add("btn-secondary");
-    });
-    const activeBtn = document.getElementById("horizon-" + days);
-    if (activeBtn) {
-        activeBtn.classList.add("active", "btn-primary");
-        activeBtn.classList.remove("btn-secondary");
-    }
-    
-    showToast(`Time horizon set to ${days} days. Refreshing live API metrics...`);
-    resetAppData();
-    loadStats();
-}
 
 // Redirect User to Google Consent screen
 async function redirectToGoogle() {
     try {
         const res = await fetch("/api/auth-url");
-        if (!res.ok) throw new Error("Auth url error");
+        if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.error || "Server OAuth credentials (CLIENT_ID / CLIENT_SECRET) not configured.");
+        }
         const data = await res.json();
         window.location.href = data.url;
     } catch (e) {
-        showToast("Failed to fetch Google authorization link. Check server OAuth settings.", true);
+        showToast("Cannot connect: Server OAuth credentials (CLIENT_ID / CLIENT_SECRET environment variables) are not set.", true);
     }
 }
 
@@ -336,7 +322,7 @@ async function triggerRefresh() {
     if (btnSettings) btnSettings.disabled = true;
     if (iconSidebar) iconSidebar.classList.add("spin");
 
-    showToast(`Querying Google Health API for last ${currentHorizonDays} days...`);
+    showToast("Querying Google Health API for complete health history...");
 
     try {
         resetAppData();

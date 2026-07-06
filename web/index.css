@@ -259,6 +259,14 @@ body {
     padding: 6px 14px 6px 6px;
     border-radius: 30px;
     backdrop-filter: blur(12px);
+    cursor: pointer;
+    transition: var(--transition-quick);
+}
+
+.user-badge:hover {
+    border-color: var(--color-purple);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
 }
 
 .avatar {

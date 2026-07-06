@@ -701,3 +701,77 @@ func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDat
 
 	return records, nextStepsToken, nil
 }
+
+// GenerateSampleStats creates realistic sample health metrics for guest mode when logged out
+func GenerateSampleStats(days int) *StatsResponse {
+	if days > 30 {
+		days = 30
+	}
+	if days <= 0 {
+		days = 14
+	}
+	now := time.Now().UTC()
+	var (
+		sleeps []SleepSession
+		rhrs   []RHRRecord
+		hrvs   []HRVRecord
+		acts   []ActivityRecord
+	)
+	for i := 0; i < days; i++ {
+		date := now.AddDate(0, 0, -i)
+		dateStr := date.Format("2006-01-02")
+		prevDateStr := date.AddDate(0, 0, -1).Format("2006-01-02")
+
+		// Sleep
+		startSleep := prevDateStr + "T23:15:00Z"
+		endSleep := dateStr + "T06:45:00Z"
+		sleeps = append(sleeps, SleepSession{
+			ID:              fmt.Sprintf("sample-sleep-%d", i),
+			StartTime:       startSleep,
+			EndTime:         endSleep,
+			DurationMinutes: 450,
+			MinutesAsleep:   410,
+			MinutesAwake:    40,
+			SleepType:       "stages",
+			Stages: []SleepStage{
+				{StageType: "deep", StartTime: startSleep, EndTime: prevDateStr + "T23:55:00Z", DurationMinutes: 40},
+				{StageType: "light", StartTime: prevDateStr + "T23:55:00Z", EndTime: dateStr + "T03:30:00Z", DurationMinutes: 215},
+				{StageType: "rem", StartTime: dateStr + "T03:30:00Z", EndTime: dateStr + "T05:30:00Z", DurationMinutes: 120},
+				{StageType: "deep", StartTime: dateStr + "T05:30:00Z", EndTime: dateStr + "T06:05:00Z", DurationMinutes: 35},
+				{StageType: "awake", StartTime: dateStr + "T06:05:00Z", EndTime: endSleep, DurationMinutes: 40},
+			},
+		})
+
+		// Heart
+		bpm := 60 + (i % 5) - 2
+		rhrs = append(rhrs, RHRRecord{Date: dateStr, BeatsPerMinute: bpm})
+
+		avgHrv := 55.0 + float64((i*7)%15) - 5.0
+		entropy := 4.15
+		deepRmssd := 48.0 + float64(i%6)
+		hrvs = append(hrvs, HRVRecord{
+			Date:           dateStr,
+			AvgHRVMs:       avgHrv,
+			Entropy:        &entropy,
+			DeepSleepRMSSD: &deepRmssd,
+		})
+
+		// Activity
+		steps := 8200 + ((i * 1234) % 4000)
+		cals := 2200 + ((i * 432) % 450)
+		mins := 45 + ((i * 17) % 35)
+		acts = append(acts, ActivityRecord{
+			Date:           dateStr,
+			Steps:          steps,
+			CaloriesBurned: cals,
+			ActiveMinutes:  mins,
+		})
+	}
+
+	return &StatsResponse{
+		SleepSessions:   sleeps,
+		RHRRecords:      rhrs,
+		HRVRecords:      hrvs,
+		ActivityRecords: acts,
+	}
+}

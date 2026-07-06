@@ -176,19 +176,21 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	token, err := GetSessionCookie(r)
 	if err != nil || token == nil {
-		http.Error(w, "Unauthorized: No valid session", http.StatusUnauthorized)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(GenerateSampleStats(14))
 		return
 	}
 
 	client, err := s.service.GetOAuthClient(r.Context(), token, w)
 	if err != nil {
 		ClearSessionCookie(w)
-		http.Error(w, "Unauthorized: Failed to authenticate with Google", http.StatusUnauthorized)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(GenerateSampleStats(14))
 		return
 	}
 
 	limitStr := r.URL.Query().Get("limit")
-	days := 14 // Default to 14 days of live data for fast page load
+	days := 3650 // Default to 3650 days (10 years) of data for maximum allowed history
 	if limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 3650 {
 			days = l
