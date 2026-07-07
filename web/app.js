@@ -144,14 +144,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Load setup
     refreshStatus().then(() => {
-        if (appStatus.oauth_connected) {
-            loadStats();
-        } else {
-            if (!justConnected) {
-                showToast("Previewing sample health metrics in Guest Mode. Click Guest icon or Settings to login!", false);
-            }
-            loadStats();
-        }
+        loadStats();
     });
 });
 
