@@ -91,7 +91,7 @@ function loadCache() {
         const raw = localStorage.getItem("pulse_app_cache");
         if (!raw) return false;
         const cached = JSON.parse(raw);
-        if (cached.horizon === currentHorizonDays && cached.data && (Date.now() - cached.timestamp < 24 * 60 * 60 * 1000)) {
+        if (cached.horizon === currentHorizonDays && cached.data && (Date.now() - cached.timestamp < 6 * 60 * 60 * 1000)) {
             Object.assign(appData, cached.data);
             appData.sleep_loading = false;
             appData.heart_loading = false;
@@ -802,7 +802,7 @@ function renderOverviewCharts(data) {
                 plugins: { legend: { labels: { color: '#94a3b8' } } },
                 scales: {
                     x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } },
-                    y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' }, title: { display: true, text: 'Minutes', color: '#94a3b8' } }
+                    y: { min: 0, beginAtZero: true, grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' }, title: { display: true, text: 'Minutes', color: '#94a3b8' } }
                 }
             }
         });
@@ -856,7 +856,7 @@ function renderOverviewCharts(data) {
                 scales: {
                     x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } },
                     y: {
-                        type: 'linear', position: 'left',
+                        type: 'linear', position: 'left', min: 0, beginAtZero: true,
                         grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' },
                         title: { display: true, text: 'HRV (ms)', color: '#38bdf8' }
                     },
@@ -910,7 +910,7 @@ function renderSleepCharts(data) {
             plugins: { legend: { labels: { color: '#94a3b8' } } },
             scales: {
                 x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } },
-                y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' }, title: { display: true, text: 'Minutes', color: '#94a3b8' } }
+                y: { min: 0, beginAtZero: true, grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' }, title: { display: true, text: 'Minutes', color: '#94a3b8' } }
             }
         }
     });
@@ -995,7 +995,7 @@ function renderHeartCharts(data) {
                 plugins: { legend: { display: false } },
                 scales: {
                     x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } },
-                    y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' }, title: { display: true, text: 'ms', color: '#38bdf8' } }
+                    y: { min: 0, beginAtZero: true, grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' }, title: { display: true, text: 'ms', color: '#38bdf8' } }
                 }
             }
         });
