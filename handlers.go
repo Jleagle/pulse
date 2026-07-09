@@ -2,8 +2,10 @@ package main
 
 import (
 	"embed"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"log"
 	"net/http"
@@ -39,6 +41,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/logout", s.handleLogout)
 	mux.HandleFunc("GET /api/logout", s.handleLogout)
 	mux.HandleFunc("GET /api/stats", s.handleStats)
+	mux.HandleFunc("POST /api/security-events", s.handleSecurityEvents)
+	mux.HandleFunc("POST /api/risc-webhook", s.handleSecurityEvents)
 
 	// Frontend static assets
 	subFS, err := fs.Sub(webAssets, "web")
@@ -233,4 +237,34 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
+}
+
+// handleSecurityEvents implements Google Cross-Account Protection (RISC - RFC 8915) Security Event Token receiver
+func (s *Server) handleSecurityEvents(w http.ResponseWriter, r *http.Request) {
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil || len(body) == 0 {
+		http.Error(w, "Bad Request: empty or unreadable SET body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	parts := strings.Split(string(body), ".")
+	if len(parts) == 3 {
+		payloadBytes, err := base64.RawURLEncoding.DecodeString(parts[1])
+		if err != nil {
+			payloadBytes, _ = base64.URLEncoding.DecodeString(parts[1])
+		}
+		if len(payloadBytes) > 0 {
+			var setPayload map[string]interface{}
+			if json.Unmarshal(payloadBytes, &setPayload) == nil {
+				log.Printf("[SECURITY EVENT TOKEN] Google Cross-Account Protection alert received: iss=%v sub=%v events=%v",
+					setPayload["iss"], setPayload["sub"], setPayload["events"])
+			}
+		}
+	} else {
+		log.Printf("[SECURITY EVENT TOKEN] Received non-JWT or raw RISC event notification (%d bytes)", len(body))
+	}
+
+	w.WriteHeader(http.StatusAccepted)
 }
