@@ -42,7 +42,6 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/logout", s.handleLogout)
 	mux.HandleFunc("GET /api/stats", s.handleStats)
 	mux.HandleFunc("POST /api/security-events", s.handleSecurityEvents)
-	mux.HandleFunc("POST /api/risc-webhook", s.handleSecurityEvents)
 
 	// Frontend static assets
 	subFS, err := fs.Sub(webAssets, "web")
