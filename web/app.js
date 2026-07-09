@@ -290,10 +290,14 @@ async function refreshStatus() {
 }
 
 
-// Redirect User to Google Consent screen
-async function redirectToGoogle() {
+// Redirect User to Google Consent screen (supports incremental scope authorization)
+async function redirectToGoogle(scope = '') {
     try {
-        const res = await fetch("/api/auth-url");
+        let url = "/api/auth-url";
+        if (scope && typeof scope === "string") {
+            url += "?scope=" + encodeURIComponent(scope);
+        }
+        const res = await fetch(url);
         if (!res.ok) {
             const errData = await res.json().catch(() => ({}));
             throw new Error(errData.error || "Server OAuth credentials (CLIENT_ID / CLIENT_SECRET) not configured.");
@@ -451,6 +455,27 @@ function hideLoadingSpinner(metric) {
     });
 }
 
+function handleMissingScopes(metric, missingScopes) {
+    if (!missingScopes || !Array.isArray(missingScopes) || missingScopes.length === 0) return;
+    
+    let targetScope = "";
+    let scopeName = "";
+    if ((metric === "sleep" || metric === "overview") && missingScopes.includes("sleep")) {
+        targetScope = "sleep";
+        scopeName = "Sleep Analysis";
+    } else if ((metric === "heart" || metric === "rhr" || metric === "hrv" || metric === "overview") && missingScopes.includes("heart")) {
+        targetScope = "heart";
+        scopeName = "Heart Health";
+    } else if ((metric === "activity" || metric === "overview") && missingScopes.includes("activity")) {
+        targetScope = "activity";
+        scopeName = "Activity & Fitness";
+    }
+
+    if (targetScope && appStatus.oauth_connected) {
+        showToast(`Permission required: You did not grant read permission for ${scopeName} data. Click 'Connect Google Health' on the settings page to grant this scope on demand.`, true);
+    }
+}
+
 async function loadMetric(metric, pageToken = "") {
     if (appData[`${metric}_loading`]) return;
     appData[`${metric}_loading`] = true;
@@ -475,6 +500,9 @@ async function loadMetric(metric, pageToken = "") {
         }
 
         const data = await res.json();
+        if (data && data.missing_scopes && data.missing_scopes.length > 0) {
+            handleMissingScopes(metric, data.missing_scopes);
+        }
 
         if (metric === "overview") {
             appData.overview_loaded = true;

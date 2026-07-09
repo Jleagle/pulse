@@ -121,7 +121,29 @@ func (s *Server) handleAuthURL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	config := s.service.GetOAuthConfig(s.redirectURI)
-	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline, oauth2.ApprovalForce)
+	reqScope := r.URL.Query().Get("scope")
+	if reqScope != "" {
+		scopeURI := reqScope
+		switch reqScope {
+		case "sleep":
+			scopeURI = "https://www.googleapis.com/auth/googlehealth.sleep.readonly"
+		case "heart":
+			scopeURI = "https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly"
+		case "activity":
+			scopeURI = "https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly"
+		}
+		config.Scopes = []string{
+			scopeURI,
+			"https://www.googleapis.com/auth/userinfo.email",
+			"https://www.googleapis.com/auth/userinfo.profile",
+		}
+	}
+
+	authURL := config.AuthCodeURL("state-token",
+		oauth2.AccessTypeOffline,
+		oauth2.ApprovalForce,
+		oauth2.SetAuthURLParam("include_granted_scopes", "true"),
+	)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"url": authURL})
 }

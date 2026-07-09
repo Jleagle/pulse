@@ -297,9 +297,20 @@ func (s *StatelessService) FetchAllStats(client *http.Client, days int, metric, 
 
 	wg.Wait()
 
+	isScopeErr := func(err error) bool {
+		if err == nil {
+			return false
+		}
+		s := err.Error()
+		return strings.Contains(s, "403") || strings.Contains(s, "insufficient") || strings.Contains(s, "PERMISSION_DENIED") || strings.Contains(s, "scopes")
+	}
+
 	if errSleep != nil && fetchSlp {
 		if strings.Contains(errSleep.Error(), "RATE_LIMIT_BACKOFF") {
 			return nil, errSleep
+		}
+		if isScopeErr(errSleep) {
+			resp.MissingScopes = append(resp.MissingScopes, "sleep")
 		}
 		fmt.Printf("[Stateless Fetch] Sleep error: %v\n", errSleep)
 	} else if fetchSlp {
@@ -310,6 +321,9 @@ func (s *StatelessService) FetchAllStats(client *http.Client, days int, metric, 
 		if strings.Contains(errRHR.Error(), "RATE_LIMIT_BACKOFF") {
 			return nil, errRHR
 		}
+		if isScopeErr(errRHR) {
+			resp.MissingScopes = append(resp.MissingScopes, "heart")
+		}
 		fmt.Printf("[Stateless Fetch] RHR error: %v\n", errRHR)
 	} else if fetchR {
 		fmt.Printf("[Stateless Fetch] Retrieved %d real resting heart rate records from Google Health API\n", len(resp.RHRRecords))
@@ -319,6 +333,9 @@ func (s *StatelessService) FetchAllStats(client *http.Client, days int, metric, 
 		if strings.Contains(errHRV.Error(), "RATE_LIMIT_BACKOFF") {
 			return nil, errHRV
 		}
+		if isScopeErr(errHRV) {
+			resp.MissingScopes = append(resp.MissingScopes, "heart")
+		}
 		fmt.Printf("[Stateless Fetch] HRV error: %v\n", errHRV)
 	} else if fetchH {
 		fmt.Printf("[Stateless Fetch] Retrieved %d real HRV records from Google Health API\n", len(resp.HRVRecords))
@@ -327,6 +344,9 @@ func (s *StatelessService) FetchAllStats(client *http.Client, days int, metric, 
 	if errAct != nil && fetchA {
 		if strings.Contains(errAct.Error(), "RATE_LIMIT_BACKOFF") {
 			return nil, errAct
+		}
+		if isScopeErr(errAct) {
+			resp.MissingScopes = append(resp.MissingScopes, "activity")
 		}
 		fmt.Printf("[Stateless Fetch] Activity error: %v\n", errAct)
 	} else if fetchA {

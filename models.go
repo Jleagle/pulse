@@ -68,6 +68,7 @@ type StatsResponse struct {
 	HRVNextPageToken      string           `json:"hrv_next_page_token,omitempty"`
 	ActivityRecords       []ActivityRecord `json:"activity_records"`
 	ActivityNextPageToken string           `json:"activity_next_page_token,omitempty"`
+	MissingScopes         []string         `json:"missing_scopes,omitempty"`
 }
 
 // Status Response for the frontend
