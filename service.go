@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -109,6 +111,12 @@ type ListDataPointsResponse struct {
 	NextPageToken string      `json:"nextPageToken"`
 }
 
+type SavedConfig struct {
+	ClientID     string `json:"client_id"`
+	ClientSecret string `json:"client_secret"`
+	RedirectURI  string `json:"redirect_uri,omitempty"`
+}
+
 type StatelessService struct {
 	clientID     string
 	clientSecret string
@@ -118,10 +126,66 @@ type StatelessService struct {
 }
 
 func NewStatelessService(clientID, clientSecret, redirectURI string) *StatelessService {
-	return &StatelessService{
+	srv := &StatelessService{
 		clientID:     clientID,
 		clientSecret: clientSecret,
 		redirectURI:  redirectURI,
+	}
+	// Try loading saved config from disk if environment credentials were not provided or to restore saved redirect URI
+	srv.LoadConfigFromFile()
+	return srv
+}
+
+func (s *StatelessService) GetCredentials() (string, string, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.clientID, s.clientSecret, s.redirectURI
+}
+
+func (s *StatelessService) SetCredentials(clientID, clientSecret, redirectURI string) error {
+	s.mu.Lock()
+	if clientID != "" {
+		s.clientID = strings.TrimSpace(clientID)
+	}
+	if clientSecret != "" {
+		s.clientSecret = strings.TrimSpace(clientSecret)
+	}
+	if redirectURI != "" {
+		s.redirectURI = strings.TrimSpace(redirectURI)
+	}
+	cID := s.clientID
+	cSec := s.clientSecret
+	rURI := s.redirectURI
+	s.mu.Unlock()
+
+	cfg := SavedConfig{
+		ClientID:     cID,
+		ClientSecret: cSec,
+		RedirectURI:  rURI,
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err == nil {
+		_ = os.WriteFile("config.json", data, 0600)
+	}
+	return nil
+}
+
+func (s *StatelessService) LoadConfigFromFile() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	data, err := os.ReadFile("config.json")
+	if err == nil && len(data) > 0 {
+		var cfg SavedConfig
+		if json.Unmarshal(data, &cfg) == nil {
+			if cfg.ClientID != "" && cfg.ClientSecret != "" {
+				s.clientID = cfg.ClientID
+				s.clientSecret = cfg.ClientSecret
+				if cfg.RedirectURI != "" {
+					s.redirectURI = cfg.RedirectURI
+				}
+				log.Println("[INFO] Successfully loaded OAuth Client credentials from local config.json")
+			}
+		}
 	}
 }
 
@@ -160,9 +224,13 @@ func (s *StatelessService) getWithRateLimit(client *http.Client, urlStr string) 
 
 // GetOAuthConfig returns a standardized oauth2.Config instance
 func (s *StatelessService) GetOAuthConfig(redirectURI string) *oauth2.Config {
+	cID, cSec, defaultRedirect := s.GetCredentials()
+	if redirectURI == "" {
+		redirectURI = defaultRedirect
+	}
 	return &oauth2.Config{
-		ClientID:     s.clientID,
-		ClientSecret: s.clientSecret,
+		ClientID:     cID,
+		ClientSecret: cSec,
 		Endpoint: oauth2.Endpoint{
 			AuthURL:  "https://accounts.google.com/o/oauth2/auth",
 			TokenURL: "https://oauth2.googleapis.com/token",
@@ -182,7 +250,8 @@ func (s *StatelessService) GetOAuthConfig(redirectURI string) *oauth2.Config {
 
 // Helper to get OAuth Client and auto-refresh token in cookie if changed
 func (s *StatelessService) GetOAuthClient(ctx context.Context, token *oauth2.Token, w http.ResponseWriter) (*http.Client, error) {
-	if s.clientID == "" || s.clientSecret == "" {
+	cID, cSec, _ := s.GetCredentials()
+	if cID == "" || cSec == "" {
 		return nil, fmt.Errorf("server OAuth client credentials are not configured")
 	}
 

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"log"
@@ -42,6 +43,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/logout", s.handleLogout)
 	mux.HandleFunc("GET /api/stats", s.handleStats)
 	mux.HandleFunc("POST /api/security-events", s.handleSecurityEvents)
+	mux.HandleFunc("POST /api/config", s.handleUpdateConfig)
+	mux.HandleFunc("GET /api/config", s.handleGetConfig)
 
 	// Frontend static assets
 	subFS, err := fs.Sub(webAssets, "web")
@@ -50,7 +53,7 @@ func (s *Server) Routes() http.Handler {
 	}
 
 	// SPA tab routing so page refreshes and links work cleanly
-	for _, tab := range []string{"overview", "sleep", "heart", "activity", "settings", "privacy-policy", "terms-of-service"} {
+	for _, tab := range []string{"overview", "sleep", "heart", "activity", "settings", "setup-guide", "privacy-policy", "terms-of-service"} {
 		tabName := tab
 		mux.HandleFunc("GET /"+tabName, func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
@@ -71,8 +74,25 @@ func (s *Server) Routes() http.Handler {
 	return mux
 }
 
+func (s *Server) effectiveRedirectURI(r *http.Request) string {
+	_, _, configuredRedirect := s.service.GetCredentials()
+	if configuredRedirect != "" && !strings.Contains(configuredRedirect, "localhost") {
+		return configuredRedirect
+	}
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	host := r.Host
+	if host == "" {
+		host = "localhost:8080"
+	}
+	return fmt.Sprintf("%s://%s/oauth/callback", scheme, host)
+}
+
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
-	clientConfigured := s.service.clientID != "" && s.service.clientSecret != ""
+	cID, cSec, _ := s.service.GetCredentials()
+	clientConfigured := cID != "" && cSec != ""
 	oauthConnected := false
 	userEmail := ""
 	userName := ""
@@ -105,25 +125,78 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		userName = parts[0]
 	}
 
+	masked := ""
+	if len(cID) > 12 {
+		masked = cID[:8] + "..." + cID[len(cID)-8:]
+	} else if len(cID) > 0 {
+		masked = "********"
+	}
+
 	resp := StatusResponse{
 		ClientConfigured: clientConfigured,
 		OAuthConnected:   oauthConnected,
 		UserEmail:        userEmail,
 		UserName:         userName,
 		UserPicture:      userPic,
+		RedirectURI:      s.effectiveRedirectURI(r),
+		ClientIDMasked:   masked,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
 
+func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
+	cID, _, rURI := s.service.GetCredentials()
+	if rURI == "" {
+		rURI = s.effectiveRedirectURI(r)
+	}
+	masked := ""
+	if len(cID) > 12 {
+		masked = cID[:8] + "..." + cID[len(cID)-8:]
+	} else if len(cID) > 0 {
+		masked = "********"
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"client_id_masked": masked,
+		"redirect_uri":     rURI,
+		"configured":       strconv.FormatBool(cID != ""),
+	})
+}
+
+func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
+	var req ConfigRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(req.ClientID) == "" || strings.TrimSpace(req.ClientSecret) == "" {
+		http.Error(w, "Both Client ID and Client Secret are required", http.StatusBadRequest)
+		return
+	}
+	err := s.service.SetCredentials(req.ClientID, req.ClientSecret, req.RedirectURI)
+	if err != nil {
+		http.Error(w, "Failed to save configuration: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	log.Printf("[INFO] Self-Hosted OAuth Client credentials updated via Web UI")
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(ConfigResponse{
+		Status:      "ok",
+		Message:     "Credentials saved and activated successfully!",
+		RedirectURI: s.effectiveRedirectURI(r),
+	})
+}
+
 func (s *Server) handleAuthURL(w http.ResponseWriter, r *http.Request) {
-	if s.service.clientID == "" || s.service.clientSecret == "" {
+	cID, cSec, _ := s.service.GetCredentials()
+	if cID == "" || cSec == "" {
 		http.Error(w, "OAuth Client ID or Secret not configured on server", http.StatusInternalServerError)
 		return
 	}
 
-	config := s.service.GetOAuthConfig(s.redirectURI)
+	config := s.service.GetOAuthConfig(s.effectiveRedirectURI(r))
 	reqScope := r.URL.Query().Get("scope")
 	if reqScope != "" {
 		scopeURI := reqScope
@@ -158,12 +231,13 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.service.clientID == "" || s.service.clientSecret == "" {
+	cID, cSec, _ := s.service.GetCredentials()
+	if cID == "" || cSec == "" {
 		http.Redirect(w, r, "/?error=server_not_configured", http.StatusFound)
 		return
 	}
 
-	config := s.service.GetOAuthConfig(s.redirectURI)
+	config := s.service.GetOAuthConfig(s.effectiveRedirectURI(r))
 	token, err := config.Exchange(r.Context(), code)
 	if err != nil {
 		log.Printf("[ERROR] OAuth token exchange failed: %v", err)

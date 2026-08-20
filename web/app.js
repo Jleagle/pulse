@@ -177,6 +177,7 @@ function switchTab(tabId, updateUrl = true) {
         heart: "Heart Health Trends",
         activity: "Activity & Energy",
         settings: "Application Settings",
+        "setup-guide": "Self-Host Setup Guide",
         "privacy-policy": "Privacy Policy",
         "terms-of-service": "Terms of Service"
     };
@@ -237,8 +238,18 @@ async function refreshStatus() {
         const avatarBadge = document.getElementById("avatar-badge");
 
         if (oauthConfigStatus) {
-            oauthConfigStatus.textContent = appStatus.client_configured ? "Active & Configured by Host" : "Missing Host Credentials";
+            oauthConfigStatus.textContent = appStatus.client_configured ? "✅ Active (BYOK Configured)" : "⚠️ Missing Host Credentials";
             oauthConfigStatus.style.color = appStatus.client_configured ? "var(--color-emerald)" : "var(--color-rose)";
+            oauthConfigStatus.style.background = appStatus.client_configured ? "rgba(52, 211, 153, 0.15)" : "rgba(244, 63, 94, 0.15)";
+        }
+
+        const configRedirectUri = document.getElementById("config-redirect-uri");
+        const guideRedirectUri = document.getElementById("guide-redirect-uri");
+        if (configRedirectUri && appStatus.redirect_uri) configRedirectUri.value = appStatus.redirect_uri;
+        if (guideRedirectUri && appStatus.redirect_uri) guideRedirectUri.value = appStatus.redirect_uri;
+
+        if (appStatus.client_id_masked && document.getElementById("config-client-id") && !document.getElementById("config-client-id").value) {
+            document.getElementById("config-client-id").placeholder = "Active: " + appStatus.client_id_masked;
         }
 
         if (appStatus.oauth_connected) {
@@ -307,6 +318,57 @@ async function redirectToGoogle(scope = '') {
     } catch (e) {
         showToast("Cannot connect: Server OAuth credentials (CLIENT_ID / CLIENT_SECRET environment variables) are not set.", true);
     }
+}
+
+async function saveServerConfig(event) {
+    event.preventDefault();
+    const btnSave = document.getElementById("btn-save-config");
+    const client_id = document.getElementById("config-client-id").value.trim();
+    const client_secret = document.getElementById("config-client-secret").value.trim();
+    const redirect_uri = document.getElementById("config-redirect-uri").value.trim();
+
+    if (!client_id || !client_secret) {
+        showToast("Please provide both Google Client ID and Client Secret.", true);
+        return;
+    }
+
+    if (btnSave) {
+        btnSave.disabled = true;
+        btnSave.innerHTML = '<i data-lucide="loader" class="spin"></i> Saving...';
+    }
+
+    try {
+        const res = await fetch("/api/config", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ client_id, client_secret, redirect_uri })
+        });
+        if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.message || errData.error || "Failed to save configuration.");
+        }
+        const data = await res.json();
+        showToast(data.message || "Self-Hosted OAuth credentials activated successfully!");
+        document.getElementById("config-client-secret").value = "";
+        await refreshStatus();
+    } catch (e) {
+        showToast(e.message || "Error saving configuration", true);
+    } finally {
+        if (btnSave) {
+            btnSave.disabled = false;
+            btnSave.innerHTML = '<i data-lucide="save"></i> Save & Activate Instance';
+            lucide.createIcons();
+        }
+    }
+}
+
+function copyRedirectURI() {
+    const uri = (appStatus && appStatus.redirect_uri) || document.getElementById("config-redirect-uri")?.value || window.location.origin + "/oauth/callback";
+    navigator.clipboard.writeText(uri).then(() => {
+        showToast("Redirect URI copied to clipboard!");
+    }).catch(() => {
+        showToast("Failed to copy URI, please copy manually: " + uri, true);
+    });
 }
 
 // Sign Out & Revoke Session

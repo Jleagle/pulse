@@ -57,6 +57,10 @@
                     <i data-lucide="settings"></i>
                     <span>Settings</span>
                 </button>
+                <button id="nav-btn-setup-guide" class="nav-item" onclick="switchTab('setup-guide')">
+                    <i data-lucide="book-open"></i>
+                    <span>Self-Host Guide</span>
+                </button>
             </nav>
 
             <div class="sidebar-footer">
@@ -88,10 +92,10 @@
                 <!-- Welcome Hero Banner for Disconnected Users -->
                 <div id="welcome-hero" class="welcome-hero glass-panel" style="display: none;">
                     <div class="hero-content">
-                        <div class="hero-badge">⚡ Pure Stateless SaaS Architecture</div>
+                        <div class="hero-badge">⚡ Self-Hosted BYOK Mode ($0 CASA Audit Fee)</div>
                         <h2>Track your Google Health metrics live on-the-fly.</h2>
                         <p>Connect your Fitbit or Pixel Watch account to analyze sleep stages, resting heart rate, and activity recovery. Pulse processes your health data entirely in server memory—nothing is ever stored to disk or a database.</p>
-                        <div class="hero-actions">
+                        <div class="hero-actions" style="display: flex; gap: 14px; flex-wrap: wrap;">
                             <button class="btn btn-google-hero" onclick="redirectToGoogle()">
                                 <svg class="google-logo" viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
                                     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -100,6 +104,9 @@
                                     <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
                                 </svg>
                                 <span>Connect Google Health</span>
+                            </button>
+                            <button class="btn btn-secondary" onclick="switchTab('setup-guide')" style="padding: 12px 20px; display: flex; align-items: center; gap: 8px; font-weight: 600;">
+                                <i data-lucide="book-open"></i> Self-Host Guide & Free Keys
                             </button>
                         </div>
                         <div class="hero-legal-notice" style="margin-top: 14px; font-size: 0.8rem; color: var(--text-muted);">
@@ -389,6 +396,50 @@
                             </div>
                         </div>
 
+                        <!-- Self-Hosted Configuration Card -->
+                        <div class="danger-zone-box" style="border-top: 1px solid var(--border-color); padding-top: 24px; margin-top: 8px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
+                                <div>
+                                    <h4 style="margin: 0;">Self-Hosted OAuth Configuration</h4>
+                                    <p class="panel-subtitle" style="margin: 4px 0 0;">Bring Your Own Keys (BYOK) to bypass the $500/year CASA audit fee.</p>
+                                </div>
+                                <span id="oauth-config-status" style="font-size: 0.85rem; font-weight: 600; padding: 4px 12px; border-radius: 20px; background: rgba(255,255,255,0.05);">Checking...</span>
+                            </div>
+
+                            <div style="background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.2); border-radius: 12px; padding: 14px; display: flex; gap: 12px; align-items: flex-start; margin-bottom: 18px;">
+                                <i data-lucide="info" class="icon-purple" style="flex-shrink: 0; margin-top: 2px;"></i>
+                                <div style="font-size: 0.86rem; color: var(--text-secondary); line-height: 1.6;">
+                                    <strong>Why Self-Host?</strong> By creating a free Google Cloud project in <em>Testing status</em>, up to 100 users/family members can connect their Google Health / Fitbit accounts completely for free with zero security audit requirements. <a href="#" onclick="event.preventDefault(); switchTab('setup-guide');" style="color: var(--color-purple); font-weight: 600; text-decoration: underline;">Read 2-Minute Setup Guide →</a>
+                                </div>
+                            </div>
+
+                            <form id="config-form" onsubmit="saveServerConfig(event)" style="display: flex; flex-direction: column; gap: 16px;">
+                                <div style="display: flex; flex-direction: column; gap: 6px;">
+                                    <label for="config-client-id" style="font-size: 0.88rem; font-weight: 600; color: var(--text-primary);">Google Client ID</label>
+                                    <input type="text" id="config-client-id" placeholder="e.g. 123456789-abc.apps.googleusercontent.com" required style="padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.3); color: var(--text-primary); font-family: monospace; font-size: 0.88rem;">
+                                </div>
+
+                                <div style="display: flex; flex-direction: column; gap: 6px;">
+                                    <label for="config-client-secret" style="font-size: 0.88rem; font-weight: 600; color: var(--text-primary);">Google Client Secret</label>
+                                    <input type="password" id="config-client-secret" placeholder="GOCSPX-..." required style="padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.3); color: var(--text-primary); font-family: monospace; font-size: 0.88rem;">
+                                </div>
+
+                                <div style="display: flex; flex-direction: column; gap: 6px;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <label for="config-redirect-uri" style="font-size: 0.88rem; font-weight: 600; color: var(--text-primary);">Authorized Redirect URI <span style="font-weight: 400; color: var(--text-muted);">(Copy exact URI to Google Console)</span></label>
+                                        <button type="button" onclick="copyRedirectURI()" style="background: none; border: none; color: var(--color-purple); cursor: pointer; font-size: 0.82rem; font-weight: 600; display: flex; align-items: center; gap: 4px;"><i data-lucide="copy" style="width: 14px; height: 14px;"></i> Copy URI</button>
+                                    </div>
+                                    <input type="text" id="config-redirect-uri" readonly style="padding: 10px 14px; border-radius: 8px; border: 1px dashed var(--color-purple); background: rgba(139, 92, 246, 0.05); color: var(--text-primary); font-family: monospace; font-size: 0.88rem;">
+                                </div>
+
+                                <div style="display: flex; justify-content: flex-end; margin-top: 6px;">
+                                    <button type="submit" class="btn btn-purple" id="btn-save-config" style="padding: 10px 20px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                                        <i data-lucide="save"></i> Save & Activate Instance
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
                         <div class="danger-zone-box">
                             <h4>Session Management</h4>
                             <p class="panel-subtitle">Manage your active browser session cookie.</p>
@@ -413,6 +464,109 @@
                                 </button>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: SETUP GUIDE -->
+            <section id="tab-setup-guide" class="tab-pane">
+                <div class="glass-panel" style="padding: 36px; max-width: 920px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+                        <div style="display: flex; align-items: center; gap: 12px; color: var(--color-purple);">
+                            <i data-lucide="shield-check" style="width: 26px; height: 26px;"></i>
+                            <span style="font-weight: 700; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.6px;">Self-Hosted BYO-Credentials Exemption</span>
+                        </div>
+                        <span class="badge badge-emerald" style="padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: rgba(52, 211, 153, 0.15); color: var(--color-emerald);">Save $500/yr on CASA Audits</span>
+                    </div>
+
+                    <div>
+                        <h2 style="font-size: 2rem; font-weight: 700; margin: 0 0 12px;">2-Minute Google Cloud Setup Guide</h2>
+                        <p style="color: var(--text-secondary); line-height: 1.75; font-size: 1.02rem; margin: 0;">
+                            By setting up your own free Google Cloud Project in <strong>Testing Status</strong>, you can use Pulse with up to 100 test users completely free—bypassing Google's $500/year annual CASA AL1 security assessment requirement while maintaining 100% data privacy!
+                        </p>
+                    </div>
+
+                    <div class="setup-steps-container" style="display: flex; flex-direction: column; gap: 22px;">
+                        <!-- Step 1 -->
+                        <div class="setup-step-card" style="display: flex; gap: 18px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 16px; padding: 22px;">
+                            <div class="step-num" style="width: 36px; height: 36px; border-radius: 50%; background: var(--color-purple); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0;">1</div>
+                            <div style="display: flex; flex-direction: column; gap: 8px;">
+                                <h4 style="font-size: 1.15rem; color: var(--text-primary); margin: 0;">Create a Free Google Cloud Project</h4>
+                                <p style="color: var(--text-secondary); line-height: 1.6; margin: 0;">
+                                    Navigate to the <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer" style="color: var(--color-purple); font-weight: 600; text-decoration: underline;">Google Cloud Console</a>, sign in with your Google Account, and click <strong>New Project</strong>. Name your project <code>Pulse Self-Hosted</code> and click Create.
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Step 2 -->
+                        <div class="setup-step-card" style="display: flex; gap: 18px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 16px; padding: 22px;">
+                            <div class="step-num" style="width: 36px; height: 36px; border-radius: 50%; background: var(--color-purple); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0;">2</div>
+                            <div style="display: flex; flex-direction: column; gap: 8px;">
+                                <h4 style="font-size: 1.15rem; color: var(--text-primary); margin: 0;">Enable the Google Fitness / Health API</h4>
+                                <p style="color: var(--text-secondary); line-height: 1.6; margin: 0;">
+                                    In the left sidebar, go to <strong>APIs & Services → Library</strong>. Search for <strong>Google Health API</strong> (or Fitness API) and click <strong>Enable</strong>.
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Step 3 -->
+                        <div class="setup-step-card" style="display: flex; gap: 18px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 16px; padding: 22px;">
+                            <div class="step-num" style="width: 36px; height: 36px; border-radius: 50%; background: var(--color-emerald); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0;">3</div>
+                            <div style="display: flex; flex-direction: column; gap: 8px;">
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <h4 style="font-size: 1.15rem; color: var(--text-primary); margin: 0;">Configure OAuth Consent Screen (Testing Status)</h4>
+                                    <span style="font-size: 0.75rem; background: rgba(52, 211, 153, 0.2); color: var(--color-emerald); padding: 2px 8px; border-radius: 10px; font-weight: 700;">CRITICAL STEP</span>
+                                </div>
+                                <p style="color: var(--text-secondary); line-height: 1.6; margin: 0;">
+                                    Go to <strong>APIs & Services → OAuth consent screen</strong>:
+                                </p>
+                                <ul style="color: var(--text-secondary); line-height: 1.6; margin: 4px 0 0 18px; display: flex; flex-direction: column; gap: 6px;">
+                                    <li>Select User Type: <strong>External</strong> (or Internal if using Google Workspace).</li>
+                                    <li>Set App Name to <code>Pulse</code> and fill in your email address.</li>
+                                    <li>Keep Publishing status strictly in <strong>Testing</strong> mode. Do not click "Publish App"!</li>
+                                    <li>Under <strong>Test users</strong>, add your personal Google email address (and up to 99 friends or family members who will use your self-hosted Pulse instance).</li>
+                                </ul>
+                                <div style="margin-top: 6px; padding: 12px 14px; background: rgba(52, 211, 153, 0.08); border: 1px solid rgba(52, 211, 153, 0.25); border-radius: 10px; font-size: 0.86rem; color: var(--text-primary);">
+                                    💡 <strong>Why does this work?</strong> Apps in <em>Testing</em> status with explicitly listed test users are strictly exempt from Google's annual CASA security audit requirement and fees!
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Step 4 -->
+                        <div class="setup-step-card" style="display: flex; gap: 18px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 16px; padding: 22px;">
+                            <div class="step-num" style="width: 36px; height: 36px; border-radius: 50%; background: var(--color-purple); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0;">4</div>
+                            <div style="display: flex; flex-direction: column; gap: 8px;">
+                                <h4 style="font-size: 1.15rem; color: var(--text-primary); margin: 0;">Create Web Client ID & Copy Redirect URI</h4>
+                                <p style="color: var(--text-secondary); line-height: 1.6; margin: 0;">
+                                    Go to <strong>APIs & Services → Credentials → Create Credentials → OAuth client ID</strong>.
+                                </p>
+                                <ul style="color: var(--text-secondary); line-height: 1.6; margin: 4px 0 0 18px; display: flex; flex-direction: column; gap: 6px;">
+                                    <li>Application type: <strong>Web application</strong>.</li>
+                                    <li>Under <strong>Authorized redirect URIs</strong>, click Add URI and paste exact URI:</li>
+                                </ul>
+                                <div style="display: flex; gap: 10px; align-items: center; margin-top: 8px;">
+                                    <input type="text" id="guide-redirect-uri" readonly value="http://localhost:8080/oauth/callback" style="flex: 1; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.3); color: var(--color-purple); font-family: monospace; font-size: 0.9rem;">
+                                    <button class="btn btn-secondary" onclick="copyRedirectURI()" style="padding: 10px 16px; font-size: 0.85rem;"><i data-lucide="copy"></i> Copy</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Step 5 -->
+                        <div class="setup-step-card" style="display: flex; gap: 18px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 16px; padding: 22px;">
+                            <div class="step-num" style="width: 36px; height: 36px; border-radius: 50%; background: var(--color-purple); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0;">5</div>
+                            <div style="display: flex; flex-direction: column; gap: 8px;">
+                                <h4 style="font-size: 1.15rem; color: var(--text-primary); margin: 0;">Activate Your Instance</h4>
+                                <p style="color: var(--text-secondary); line-height: 1.6; margin: 0;">
+                                    Copy the generated <strong>Client ID</strong> and <strong>Client Secret</strong> from Google Cloud Console, open the <a href="#" onclick="event.preventDefault(); switchTab('settings');" style="color: var(--color-purple); font-weight: 600; text-decoration: underline;">Settings Tab</a>, paste them into the Self-Hosted Configuration panel, and click <strong>Save & Activate Instance</strong>!
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; justify-content: center; padding-top: 10px;">
+                        <button class="btn btn-purple" onclick="switchTab('settings')" style="padding: 14px 28px; font-size: 1rem; font-weight: 600;">
+                            <i data-lucide="settings"></i> Go to Settings & Configure Keys
+                        </button>
                     </div>
                 </div>
             </section>
