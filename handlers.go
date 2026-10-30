@@ -94,15 +94,30 @@ func (s *Server) basicAuthMiddleware(next http.Handler) http.Handler {
 
 func (s *Server) effectiveRedirectURI(r *http.Request) string {
 	_, _, configuredRedirect := s.service.GetCredentials()
-	if configuredRedirect != "" && !strings.Contains(configuredRedirect, "localhost") {
+	if configuredRedirect != "" && configuredRedirect != "http://localhost:8080/oauth/callback" {
 		return configuredRedirect
 	}
+	if r == nil {
+		if configuredRedirect != "" {
+			return configuredRedirect
+		}
+		return "http://localhost:8080/oauth/callback"
+	}
 	scheme := "http"
-	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+	if isSecureRequest(r) {
 		scheme = "https"
 	}
-	host := r.Host
+	host := strings.TrimSpace(r.Header.Get("X-Forwarded-Host"))
 	if host == "" {
+		host = r.Host
+	}
+	if idx := strings.Index(host, ","); idx != -1 {
+		host = strings.TrimSpace(host[:idx])
+	}
+	if host == "" {
+		if s.redirectURI != "" {
+			return s.redirectURI
+		}
 		host = "localhost:8080"
 	}
 	return fmt.Sprintf("%s://%s/oauth/callback", scheme, host)
