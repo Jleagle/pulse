@@ -730,14 +730,31 @@ async function loadMetric(metric, pageToken = "") {
             renderHeartCharts(appData);
         } else if (metric === "activity") {
             if (pageToken) {
-                appData.activity_records = appData.activity_records.concat(data.activity_records || []);
+                const map = new Map();
+                (appData.activity_records || []).forEach(r => map.set(r.date, { ...r }));
+                (data.activity_records || []).forEach(r => {
+                    if (map.has(r.date)) {
+                        const existing = map.get(r.date);
+                        existing.steps = Math.max(existing.steps || 0, r.steps || 0);
+                        existing.calories_burned = Math.max(existing.calories_burned || 0, r.calories_burned || 0);
+                        existing.basal_calories = Math.max(existing.basal_calories || 0, r.basal_calories || 0);
+                        existing.active_minutes = Math.max(existing.active_minutes || 0, r.active_minutes || 0);
+                        existing.distance_km = Math.max(existing.distance_km || 0, r.distance_km || 0);
+                        existing.floors = Math.max(existing.floors || 0, r.floors || 0);
+                    } else {
+                        map.set(r.date, { ...r });
+                    }
+                });
+                appData.activity_records = Array.from(map.values()).sort((a, b) => (a.date < b.date ? 1 : -1));
             } else {
                 appData.activity_records = data.activity_records || [];
             }
             appData.activity_next_page_token = data.activity_next_page_token || "";
             appData.activity_loaded = true;
             populateActivityTable(appData.activity_records);
-            renderActivityCharts({ activity_records: appData.activity_records });
+            if (!pageToken) {
+                renderActivityCharts({ activity_records: appData.activity_records });
+            }
         } else if (metric === "workouts") {
             if (pageToken) {
                 appData.exercise_sessions = appData.exercise_sessions.concat(data.exercise_sessions || []);
@@ -1180,23 +1197,42 @@ function populateActivityTable(records) {
     }
 }
 
-function checkInfiniteScroll() {
+const lastScrollPositions = new WeakMap();
+let lastWindowScrollY = 0;
+
+function checkInfiniteScroll(scrollTarget = window) {
     const activeTabPane = document.querySelector(".tab-pane.active");
     if (!activeTabPane) return;
 
     const tabId = activeTabPane.id.replace("tab-", "");
-    
-    const windowScrolledNearBottom = (window.innerHeight + window.scrollY) >= (document.documentElement.scrollHeight - 300);
+    let shouldLoadMore = false;
 
-    let tableScrolledNearBottom = false;
-    const tableContainers = activeTabPane.querySelectorAll(".table-responsive, .table-container");
-    tableContainers.forEach(container => {
-        if (container.scrollHeight > container.clientHeight && (container.scrollTop + container.clientHeight) >= (container.scrollHeight - 150)) {
-            tableScrolledNearBottom = true;
+    if (scrollTarget === window || scrollTarget === document) {
+        const currentY = window.scrollY;
+        const scrollingDown = currentY > lastWindowScrollY;
+        lastWindowScrollY = currentY;
+        if (!scrollingDown) return;
+
+        // If the active tab has a scrollable table container, rely on the table scroll instead of window scroll
+        const hasScrollableTable = Array.from(activeTabPane.querySelectorAll(".table-responsive, .table-container"))
+            .some(c => c.scrollHeight > c.clientHeight + 20);
+        if (!hasScrollableTable && (window.innerHeight + currentY) >= (document.documentElement.scrollHeight - 150)) {
+            shouldLoadMore = true;
         }
-    });
+    } else if (scrollTarget && scrollTarget.classList && (scrollTarget.classList.contains("table-responsive") || scrollTarget.classList.contains("table-container"))) {
+        if (!activeTabPane.contains(scrollTarget)) return;
+        const prevTop = lastScrollPositions.get(scrollTarget) || 0;
+        const currentTop = scrollTarget.scrollTop;
+        const scrollingDown = currentTop > prevTop;
+        lastScrollPositions.set(scrollTarget, currentTop);
 
-    if (windowScrolledNearBottom || tableScrolledNearBottom) {
+        if (!scrollingDown) return;
+        if (scrollTarget.scrollHeight > scrollTarget.clientHeight && (currentTop + scrollTarget.clientHeight) >= (scrollTarget.scrollHeight - 80)) {
+            shouldLoadMore = true;
+        }
+    }
+
+    if (shouldLoadMore) {
         if (tabId === "sleep" && appData.sleep_next_page_token && !appData.sleep_loading) {
             showToast("Loading more sleep history...");
             loadMetric("sleep", appData.sleep_next_page_token);
@@ -1218,10 +1254,10 @@ function checkInfiniteScroll() {
     }
 }
 
-window.addEventListener("scroll", checkInfiniteScroll, { passive: true });
+window.addEventListener("scroll", () => checkInfiniteScroll(window), { passive: true });
 document.addEventListener("scroll", function(e) {
     if (e.target && e.target.classList && (e.target.classList.contains("table-responsive") || e.target.classList.contains("table-container"))) {
-        checkInfiniteScroll();
+        checkInfiniteScroll(e.target);
     }
 }, { passive: true, capture: true });
 

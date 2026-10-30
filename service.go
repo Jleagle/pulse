@@ -1073,7 +1073,7 @@ func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDat
 
 	var records []ActivityRecord
 	for d := range allDates {
-		if pageToken != "" || d >= startDateStr {
+		if d >= startDateStr {
 			distKm := distanceMap[d]
 			if distKm == 0 && stepsMap[d] > 0 {
 				distKm = math.Round(float64(stepsMap[d])*0.000762*100) / 100
@@ -1090,6 +1090,10 @@ func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDat
 				Floors:         floorsMap[d],
 			})
 		}
+	}
+
+	if len(records) == 0 {
+		nextStepsToken = ""
 	}
 
 	return records, nextStepsToken, nil
