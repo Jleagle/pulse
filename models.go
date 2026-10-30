@@ -178,8 +178,6 @@ type StatusResponse struct {
 	UserEmail        string `json:"user_email"`
 	UserName         string `json:"user_name"`
 	UserPicture      string `json:"user_picture"`
-	RedirectURI      string `json:"redirect_uri"`
-	ClientIDMasked   string `json:"client_id_masked"`
 }
 
 // User Profile info from Google OAuth

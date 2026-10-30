@@ -16,17 +16,7 @@
     <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link rel="stylesheet" href="index.css?v=20261031_openfreemap">
-
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-G0EJBH8BE0"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-
-      gtag('config', 'G-G0EJBH8BE0');
-    </script>
+    <link rel="stylesheet" href="index.css?v=20261031_clean">
 </head>
 <body>
     <div class="app-container">
@@ -75,11 +65,7 @@
             </nav>
 
             <div class="sidebar-footer">
-                <div class="sidebar-legal-links" style="display: flex; justify-content: space-between; font-size: 0.8rem; padding: 0 4px; color: var(--text-muted);">
-                    <a href="/privacy-policy" onclick="event.preventDefault(); switchTab('privacy-policy');" style="color: var(--text-muted); text-decoration: none; transition: var(--transition-quick);" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">Privacy</a>
-                    <span>•</span>
-                    <a href="/terms-of-service" onclick="event.preventDefault(); switchTab('terms-of-service');" style="color: var(--text-muted); text-decoration: none; transition: var(--transition-quick);" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">Terms</a>
-                    <span>•</span>
+                <div class="sidebar-legal-links" style="display: flex; justify-content: center; font-size: 0.8rem; padding: 0 4px; color: var(--text-muted);">
                     <a href="https://github.com/Jleagle/pulse" target="_blank" rel="noopener noreferrer" style="color: var(--text-muted); text-decoration: none; transition: var(--transition-quick);" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">GitHub</a>
                 </div>
             </div>
@@ -103,9 +89,8 @@
                 <!-- Welcome Hero Banner for Disconnected Users -->
                 <div id="welcome-hero" class="welcome-hero glass-panel" style="display: none;">
                     <div class="hero-content">
-                        <div class="hero-badge">⚡ Self-Hosted BYOK Mode ($0 CASA Audit Fee)</div>
-                        <h2>Track your Google Health metrics live on-the-fly.</h2>
-                        <p>Connect your Fitbit or Pixel Watch account to analyze sleep stages, resting heart rate, and activity recovery. Pulse processes your health data entirely in server memory—nothing is ever stored to disk or a database.</p>
+                        <h2>Track your Google Health metrics live.</h2>
+                        <p>Connect your Fitbit or Pixel Watch account to analyze workouts, GPS routes, sleep stages, heart rate recovery, vitals, and nutrition.</p>
                         <div class="hero-actions" style="display: flex; gap: 14px; flex-wrap: wrap;">
                             <button class="btn btn-google-hero" onclick="redirectToGoogle()">
                                 <svg class="google-logo" viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
@@ -116,9 +101,6 @@
                                 </svg>
                                 <span>Connect Google Health</span>
                             </button>
-                        </div>
-                        <div class="hero-legal-notice" style="margin-top: 14px; font-size: 0.8rem; color: var(--text-muted);">
-                            By connecting, you agree to our <a href="/terms-of-service" style="color: var(--text-secondary); text-decoration: underline;">Terms of Service</a> and <a href="/privacy-policy" style="color: var(--text-secondary); text-decoration: underline;">Privacy Policy</a>.
                         </div>
                     </div>
                 </div>
@@ -733,24 +715,6 @@
             <!-- TAB: SETTINGS -->
             <section id="tab-settings" class="tab-pane">
                 <div class="settings-grid">
-                    <!-- Privacy & Data Storage -->
-                    <div class="settings-panel glass-panel">
-                        <div class="panel-header border-bottom">
-                            <h3>Privacy & Data Storage</h3>
-                            <p class="panel-subtitle">How Pulse manages your personal health data.</p>
-                        </div>
-                        
-                        <div class="env-info-list" style="padding: 20px 0; display: flex; flex-direction: column; gap: 20px;">
-                            <div class="env-item" style="display: flex; gap: 16px; align-items: center;">
-                                <div class="env-icon" style="width: 44px; height: 44px; border-radius: 12px; background: rgba(52, 211, 153, 0.1); display: flex; align-items: center; justify-content: center;"><i data-lucide="shield" class="icon-emerald"></i></div>
-                                <div class="env-text" style="display: flex; flex-direction: column;">
-                                    <strong style="font-size: 0.95rem;">100% Private & Zero Storage Guarantee</strong>
-                                    <span style="font-size: 0.85rem; color: var(--text-secondary);">Nothing at all is stored on our servers. Your health metrics, sleep sessions, and heart rate records are fetched live from Google Health and processed entirely in memory during your active browser session. Once you close your tab or sign out, no trace of your data remains.</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
                     <!-- Integration State & Session Controls -->
                     <div class="settings-panel glass-panel flex-column">
                         <div class="panel-header border-bottom">
@@ -775,9 +739,6 @@
                                 </svg>
                                 <span>Connect Google Health</span>
                             </button>
-                            <div style="margin-top: 12px; font-size: 0.8rem; color: var(--text-muted);">
-                                View our <a href="/privacy-policy" onclick="event.preventDefault(); switchTab('privacy-policy');" style="color: var(--text-secondary); text-decoration: underline;">Privacy Policy</a> & <a href="/terms-of-service" onclick="event.preventDefault(); switchTab('terms-of-service');" style="color: var(--text-secondary); text-decoration: underline;">Terms of Service</a>.
-                            </div>
                         </div>
 
                         <div class="danger-zone-box">
@@ -807,120 +768,9 @@
                     </div>
                 </div>
             </section>
-
-            <!-- TAB: PRIVACY POLICY -->
-            <section id="tab-privacy-policy" class="tab-pane">
-                <div class="glass-panel" style="padding: 36px; max-width: 920px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px;">
-                    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
-                        <div style="display: flex; align-items: center; gap: 12px; color: var(--color-purple);">
-                            <i data-lucide="shield-check" style="width: 26px; height: 26px;"></i>
-                            <span style="font-weight: 700; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.6px;">Google OAuth Verified & Limited Use Compliant</span>
-                        </div>
-                        <span style="font-size: 0.82rem; color: var(--text-muted);">Effective Date: July 2026</span>
-                    </div>
-
-                    <h2 style="font-size: 2rem; font-weight: 700; margin: 0;">Privacy Policy</h2>
-                    <p style="color: var(--text-secondary); line-height: 1.75; font-size: 0.98rem; margin: 0;">
-                        At <strong>Pulse</strong>, protecting your personal health data is our foundational design principle. We built Pulse using a <strong>100% stateless backend server architecture</strong> so that your sensitive health metrics remain strictly under your control, are never stored in backend databases, and are never shared with advertisers or third parties.
-                    </p>
-                    
-                    <div style="border-top: 1px solid var(--border-color); padding-top: 22px;">
-                        <h3 style="margin: 0 0 10px; font-size: 1.18rem; color: var(--text-primary);">1. 100% Stateless Backend & Transient Server Processing</h3>
-                        <p style="color: var(--text-secondary); line-height: 1.75; margin: 0;">
-                            Pulse operates without database servers, persistent storage volumes, or data lakes. When you connect your Google Account, our backend Go server processes data requests purely in volatile system memory during an active API call to format metrics for your dashboard. Once your HTTP request completes, server-side memory buffers are released.
-                        </p>
-                    </div>
-
-                    <div style="border-top: 1px solid var(--border-color); padding-top: 22px;">
-                        <h3 style="margin: 0 0 10px; font-size: 1.18rem; color: var(--text-primary);">2. Local Browser Caching (6-Hour Expiry)</h3>
-                        <p style="color: var(--text-secondary); line-height: 1.75; margin: 0;">
-                            To ensure instantaneous dashboard navigation and prevent Google Health API rate-limiting, Pulse stores fetched metrics locally on your device within your web browser's <code>localStorage</code> (key: <code>pulse_app_cache</code>). This local cache automatically expires after <strong>6 hours</strong>. You can instantly purge your local browser cache at any time via the <strong>Clear Cache</strong> button under Settings or by clicking <strong>Sign Out</strong>.
-                        </p>
-                    </div>
-
-                    <div style="border-top: 1px solid var(--border-color); padding-top: 22px;">
-                        <h3 style="margin: 0 0 10px; font-size: 1.18rem; color: var(--text-primary);">3. Google API Services User Data Policy & Limited Use Compliance</h3>
-                        <p style="color: var(--text-secondary); line-height: 1.75; margin: 0;">
-                            Pulse's use and transfer to any other app of information received from Google APIs adheres strictly to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer" style="color: var(--color-purple); text-decoration: underline;">Google API Services User Data Policy</a>, including the <strong>Limited Use requirements</strong>:
-                        </p>
-                        <ul style="color: var(--text-secondary); line-height: 1.75; margin: 10px 0 0 20px; display: flex; flex-direction: column; gap: 8px;">
-                            <li><strong>Permitted Use Only:</strong> Data retrieved from Google Health APIs is used exclusively to render user-facing visualizations, charts, and activity tables inside your personal Pulse dashboard.</li>
-                            <li><strong>Zero Data Selling or Transfer:</strong> We never sell, rent, license, or transfer your Google user data to advertising networks, data brokers, or third-party analytics platforms.</li>
-                            <li><strong>No AI / ML Model Training:</strong> Your Google Health data is never used to train, fine-tune, or prompt generalized or personalized artificial intelligence or machine learning models.</li>
-                            <li><strong>No Human Access:</strong> Pulse personnel do not read or inspect your Google user data.</li>
-                        </ul>
-                    </div>
-
-                    <div style="border-top: 1px solid var(--border-color); padding-top: 22px;">
-                        <h3 style="margin: 0 0 10px; font-size: 1.18rem; color: var(--text-primary);">4. Exact OAuth Scopes Requested</h3>
-                        <p style="color: var(--text-secondary); line-height: 1.75; margin: 0 0 10px;">
-                            Pulse requests read-only OAuth 2.0 scopes strictly necessary to display your health insights:
-                        </p>
-                        <div style="display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem;">
-                            <div><code>googlehealth.sleep.readonly</code> — Visualizing sleep duration trends and sleep stages.</div>
-                            <div><code>googlehealth.health_metrics_and_measurements.readonly</code> — Visualizing Resting Heart Rate (RHR) and HRV trends.</div>
-                            <div><code>googlehealth.activity_and_fitness.readonly</code> — Visualizing daily step counts, active minutes, and active calories.</div>
-                            <div><code>userinfo.email</code> &amp; <code>userinfo.profile</code> — Identifying your active dashboard session.</div>
-                        </div>
-                    </div>
-
-                    <div style="border-top: 1px solid var(--border-color); padding-top: 22px;">
-                        <h3 style="margin: 0 0 10px; font-size: 1.18rem; color: var(--text-primary);">5. Instant Revocation & Cross-Account Protection (RISC)</h3>
-                        <p style="color: var(--text-secondary); line-height: 1.75; margin: 0;">
-                            You can revoke Pulse's access at any time from your <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer" style="color: var(--color-purple); text-decoration: underline;">Google Account Security Settings</a> or by signing out inside the app. Additionally, Pulse implements Google Cross-Account Protection (RISC Security Event Tokens); if Google signals a security event or token revocation, Pulse immediately invalidates the active session.
-                        </p>
-                    </div>
-                </div>
-            </section>
-
-            <!-- TAB: TERMS OF SERVICE -->
-            <section id="tab-terms-of-service" class="tab-pane">
-                <div class="glass-panel" style="padding: 36px; max-width: 920px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px;">
-                    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
-                        <div style="display: flex; align-items: center; gap: 12px; color: var(--color-purple);">
-                            <i data-lucide="file-text" style="width: 26px; height: 26px;"></i>
-                            <span style="font-weight: 700; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.6px;">Terms of Service</span>
-                        </div>
-                        <span style="font-size: 0.82rem; color: var(--text-muted);">Effective Date: July 2026</span>
-                    </div>
-
-                    <h2 style="font-size: 2rem; font-weight: 700; margin: 0;">Terms of Service</h2>
-                    <p style="color: var(--text-secondary); line-height: 1.75; font-size: 0.98rem; margin: 0;">
-                        By accessing or using the Pulse web application, you agree to be bound by these Terms of Service.
-                    </p>
-                    
-                    <div style="border-top: 1px solid var(--border-color); padding-top: 22px;">
-                        <h3 style="margin: 0 0 10px; font-size: 1.18rem; color: var(--text-primary);">1. Educational & Informational Use Only (Not Medical Advice)</h3>
-                        <p style="color: var(--text-secondary); line-height: 1.75; margin: 0;">
-                            Pulse is a visual analytics tool designed solely for personal wellness monitoring and educational self-reflection. Pulse is <strong>not a medical device</strong> and does not provide medical advice, diagnosis, treatment, or clinical assessment. Never disregard professional medical advice or delay seeking treatment because of data displayed on Pulse.
-                        </p>
-                    </div>
-
-                    <div style="border-top: 1px solid var(--border-color); padding-top: 22px;">
-                        <h3 style="margin: 0 0 10px; font-size: 1.18rem; color: var(--text-primary);">2. Stateless Availability & Third-Party API Reliance</h3>
-                        <p style="color: var(--text-secondary); line-height: 1.75; margin: 0;">
-                            Because Pulse operates as a stateless client without centralized database storage, the availability and accuracy of health metrics depend directly on Google Health API services and your active OAuth permissions. Pulse is provided on an "AS IS" and "AS AVAILABLE" basis without warranty of uninterrupted service.
-                        </p>
-                    </div>
-
-                    <div style="border-top: 1px solid var(--border-color); padding-top: 22px;">
-                        <h3 style="margin: 0 0 10px; font-size: 1.18rem; color: var(--text-primary);">3. Account & Session Responsibility</h3>
-                        <p style="color: var(--text-secondary); line-height: 1.75; margin: 0;">
-                            You are responsible for maintaining the security of your device and Google Account credentials. You may terminate your session or clear your local browser cache at any time using the Settings menu.
-                        </p>
-                    </div>
-
-                    <div style="border-top: 1px solid var(--border-color); padding-top: 22px;">
-                        <h3 style="margin: 0 0 10px; font-size: 1.18rem; color: var(--text-primary);">4. Limitation of Liability</h3>
-                        <p style="color: var(--text-secondary); line-height: 1.75; margin: 0;">
-                            To the maximum extent permitted by applicable law, Pulse and its developers shall not be liable for any indirect, incidental, consequential, or special damages arising out of or in connection with your use or inability to use the service.
-                        </p>
-                    </div>
-                </div>
-            </section>
         </main>
     </div>
 
-    <script src="app.js?v=20261031_nodemo"></script>
+    <script src="app.js?v=20261031_clean"></script>
 </body>
 </html>

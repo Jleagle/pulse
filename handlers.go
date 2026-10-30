@@ -2,11 +2,9 @@ package main
 
 import (
 	"embed"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"log"
 	"net/http"
@@ -43,7 +41,6 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/logout", s.handleLogout)
 	mux.HandleFunc("GET /api/stats", s.handleStats)
 	mux.HandleFunc("GET /api/exercise-route", s.handleExerciseRoute)
-	mux.HandleFunc("POST /api/security-events", s.handleSecurityEvents)
 
 	// Frontend static assets
 	subFS, err := fs.Sub(webAssets, "web")
@@ -52,7 +49,7 @@ func (s *Server) Routes() http.Handler {
 	}
 
 	// SPA tab routing so page refreshes and links work cleanly
-	for _, tab := range []string{"overview", "sleep", "heart", "activity", "workouts", "vitals", "nutrition", "settings", "privacy-policy", "terms-of-service"} {
+	for _, tab := range []string{"overview", "sleep", "heart", "activity", "workouts", "vitals", "nutrition", "settings"} {
 		tabName := tab
 		mux.HandleFunc("GET /"+tabName, func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
@@ -124,21 +121,12 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		userName = parts[0]
 	}
 
-	masked := ""
-	if len(cID) > 12 {
-		masked = cID[:8] + "..." + cID[len(cID)-8:]
-	} else if len(cID) > 0 {
-		masked = "********"
-	}
-
 	resp := StatusResponse{
 		ClientConfigured: clientConfigured,
 		OAuthConnected:   oauthConnected,
 		UserEmail:        userEmail,
 		UserName:         userName,
 		UserPicture:      userPic,
-		RedirectURI:      s.effectiveRedirectURI(r),
-		ClientIDMasked:   masked,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -308,34 +296,4 @@ func (s *Server) handleExerciseRoute(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(routeResp)
-}
-
-// handleSecurityEvents implements Google Cross-Account Protection (RISC - RFC 8915) Security Event Token receiver
-func (s *Server) handleSecurityEvents(w http.ResponseWriter, r *http.Request) {
-
-	body, err := io.ReadAll(r.Body)
-	if err != nil || len(body) == 0 {
-		http.Error(w, "Bad Request: empty or unreadable SET body", http.StatusBadRequest)
-		return
-	}
-	defer r.Body.Close()
-
-	parts := strings.Split(string(body), ".")
-	if len(parts) == 3 {
-		payloadBytes, err := base64.RawURLEncoding.DecodeString(parts[1])
-		if err != nil {
-			payloadBytes, _ = base64.URLEncoding.DecodeString(parts[1])
-		}
-		if len(payloadBytes) > 0 {
-			var setPayload map[string]interface{}
-			if json.Unmarshal(payloadBytes, &setPayload) == nil {
-				log.Printf("[SECURITY EVENT TOKEN] Google Cross-Account Protection alert received: iss=%v sub=%v events=%v",
-					setPayload["iss"], setPayload["sub"], setPayload["events"])
-			}
-		}
-	} else {
-		log.Printf("[SECURITY EVENT TOKEN] Received non-JWT or raw RISC event notification (%d bytes)", len(body))
-	}
-
-	w.WriteHeader(http.StatusAccepted)
 }

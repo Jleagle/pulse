@@ -187,7 +187,7 @@ function loadCache() {
 // Global chart references for disposal
 const activeCharts = {};
 
-const VALID_TABS = ["overview", "workouts", "sleep", "heart", "activity", "vitals", "nutrition", "settings", "privacy-policy", "terms-of-service"];
+const VALID_TABS = ["overview", "workouts", "sleep", "heart", "activity", "vitals", "nutrition", "settings"];
 
 // Handle browser back/forward buttons
 window.addEventListener("popstate", () => {
@@ -261,9 +261,7 @@ function switchTab(tabId, updateUrl = true) {
         activity: "Activity & Energy",
         vitals: "Vitals & Body Composition",
         nutrition: "Nutrition & Hydration",
-        settings: "Application Settings",
-        "privacy-policy": "Privacy Policy",
-        "terms-of-service": "Terms of Service"
+        settings: "Application Settings"
     };
     const titleEl = document.getElementById("page-title");
     if (titleEl) titleEl.textContent = titles[tabId] || "Dashboard";
@@ -496,13 +494,13 @@ async function loadStats(forceRefresh = false) {
             renderNutritionCharts(appData);
         }
 
-        if (!["overview", "settings", "privacy-policy", "terms-of-service"].includes(activeTabId) && !appData[`${activeTabId}_loaded`]) {
+        if (!["overview", "settings"].includes(activeTabId) && !appData[`${activeTabId}_loaded`]) {
             await loadMetric(activeTabId);
         }
         return;
     }
 
-    if (!["settings", "privacy-policy", "terms-of-service"].includes(activeTabId)) {
+    if (activeTabId !== "settings") {
         await loadMetric(activeTabId);
     } else {
         await loadMetric("overview");
