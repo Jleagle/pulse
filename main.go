@@ -3,11 +3,16 @@ package main
 import (
 	"bufio"
 	"cmp"
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 )
 
 func loadDotEnv(path string) {
@@ -74,7 +79,27 @@ func main() {
 	log.Printf("🔗 Default OAuth Callback URI: %s (Dynamically adjusts to accessed host)", redirectURL)
 	log.Println("⚡ Running in 100% Stateless & Private Mode (No database required)")
 
-	if err := http.ListenAndServe(addr, handler); err != nil {
+	httpServer := &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	go func() {
+		<-ctx.Done()
+		log.Println("[INFO] Shutting down server gracefully...")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = httpServer.Shutdown(shutdownCtx)
+	}()
+
+	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("Server failed: %v", err)
 	}
 }

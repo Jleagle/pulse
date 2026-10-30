@@ -1,5 +1,7 @@
 bin/
+pulse
 .env
 .DS_Store
+**/.DS_Store
 config.json
 data/

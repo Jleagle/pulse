@@ -1402,7 +1402,13 @@ func (s *StatelessService) fetchExercises(client *http.Client, startStr, pageTok
 		}
 		dispName := ex.DisplayName
 		if dispName == "" {
-			dispName = strings.Title(strings.ToLower(strings.ReplaceAll(exType, "_", " ")))
+			words := strings.Fields(strings.ToLower(strings.ReplaceAll(exType, "_", " ")))
+			for i, w := range words {
+				if len(w) > 0 {
+					words[i] = strings.ToUpper(w[:1]) + w[1:]
+				}
+			}
+			dispName = strings.Join(words, " ")
 		}
 
 		distKm := math.Round((distMm/1000000.0)*100) / 100
