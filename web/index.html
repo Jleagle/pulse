@@ -459,7 +459,7 @@
                                 <h3 id="map-workout-title">GPS Route Map</h3>
                                 <p class="chart-subtitle" id="map-workout-subtitle">Select any outdoor run, walk, ride, or hike below to inspect its GPS TCX track</p>
                             </div>
-                            <span class="badge badge-emerald" id="map-gps-badge" style="padding: 4px 10px; border-radius: 16px; font-size: 0.78rem; background: rgba(52, 211, 153, 0.15); color: var(--color-emerald);">TCX Route Active</span>
+                            <span class="badge" id="map-gps-badge">No Route Loaded</span>
                         </div>
                         <div id="workout-route-map" style="height: 360px; width: 100%; border-radius: 14px; overflow: hidden; border: 1px solid var(--border-color); background: #0f172a; position: relative; z-index: 1;"></div>
                     </div>
@@ -482,12 +482,7 @@
                                 <span><strong>Workout Heart Rate Zone Breakdown</strong></span>
                                 <span id="workout-zones-summary">Light / Moderate / Vigorous / Peak</span>
                             </div>
-                            <div id="workout-zones-bar" style="display: flex; height: 10px; border-radius: 6px; overflow: hidden; background: rgba(255,255,255,0.06);">
-                                <div style="width: 25%; background: #38bdf8;" title="Light"></div>
-                                <div style="width: 35%; background: #34d399;" title="Moderate"></div>
-                                <div style="width: 30%; background: #f59e0b;" title="Vigorous"></div>
-                                <div style="width: 10%; background: #f43f5e;" title="Peak"></div>
-                            </div>
+                            <div id="workout-zones-bar" style="display: flex; height: 10px; border-radius: 6px; overflow: hidden; background: rgba(255,255,255,0.06);"></div>
                         </div>
                     </div>
                 </div>
@@ -926,6 +921,6 @@
         </main>
     </div>
 
-    <script src="app.js?v=20261031_openfreemap"></script>
+    <script src="app.js?v=20261031_nodemo"></script>
 </body>
 </html>

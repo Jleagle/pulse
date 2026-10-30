@@ -232,16 +232,14 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	token, err := GetSessionCookie(r)
 	if err != nil || token == nil {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(GenerateSampleStats(14))
+		http.Error(w, "Unauthorized: Not connected to Google Health", http.StatusUnauthorized)
 		return
 	}
 
 	client, err := s.service.GetOAuthClient(r.Context(), token, w)
 	if err != nil {
 		ClearSessionCookie(w)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(GenerateSampleStats(14))
+		http.Error(w, "Unauthorized: Invalid or expired session", http.StatusUnauthorized)
 		return
 	}
 
@@ -283,23 +281,16 @@ func (s *Server) handleExerciseRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if strings.HasPrefix(exerciseID, "sample-ex-") {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(GenerateSampleExerciseRoute(exerciseID))
-		return
-	}
-
 	token, err := GetSessionCookie(r)
 	if err != nil || token == nil {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(GenerateSampleExerciseRoute(exerciseID))
+		http.Error(w, "Unauthorized: Not connected to Google Health", http.StatusUnauthorized)
 		return
 	}
 
 	client, err := s.service.GetOAuthClient(r.Context(), token, w)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(GenerateSampleExerciseRoute(exerciseID))
+		ClearSessionCookie(w)
+		http.Error(w, "Unauthorized: Invalid or expired session", http.StatusUnauthorized)
 		return
 	}
 

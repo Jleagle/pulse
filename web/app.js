@@ -86,6 +86,26 @@ function resetAppData() {
         nutrition_loaded: false,
         nutrition_loading: false
     };
+
+    // Destroy any active charts
+    Object.keys(activeCharts).forEach(cid => {
+        if (activeCharts[cid]) {
+            activeCharts[cid].destroy();
+            delete activeCharts[cid];
+        }
+    });
+
+    // Clear workout map route & markers
+    workoutMarkers.forEach(m => m.remove());
+    workoutMarkers = [];
+    pendingRouteRender = null;
+    if (workoutMap && workoutMapLoaded) {
+        const routeSource = workoutMap.getSource("workout-route");
+        if (routeSource) {
+            routeSource.setData({ type: "FeatureCollection", features: [] });
+        }
+    }
+
     const sleepTbody = document.querySelector("#sleep-history-table tbody");
     if (sleepTbody) sleepTbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
     const heartTbody = document.querySelector("#heart-history-table tbody");
@@ -248,6 +268,17 @@ function switchTab(tabId, updateUrl = true) {
     const titleEl = document.getElementById("page-title");
     if (titleEl) titleEl.textContent = titles[tabId] || "Dashboard";
 
+    if (tabId === "workouts") {
+        setTimeout(() => {
+            initWorkoutMap();
+            if (workoutMap) workoutMap.resize();
+        }, 50);
+    }
+
+    if (!appStatus.oauth_connected) {
+        return;
+    }
+
     if (tabId === "sleep") {
         if (!appData.sleep_loaded && !appData.sleep_loading) loadMetric("sleep");
         else if (appData.sleep_loading) showLoadingSpinner("sleep");
@@ -270,10 +301,6 @@ function switchTab(tabId, updateUrl = true) {
             renderActivityCharts({ activity_records: appData.activity_records });
         }
     } else if (tabId === "workouts") {
-        setTimeout(() => {
-            initWorkoutMap();
-            if (workoutMap) workoutMap.resize();
-        }, 50);
         if (!appData.workouts_loaded && !appData.workouts_loading) loadMetric("workouts");
         else if (appData.workouts_loading) showLoadingSpinner("workouts");
         else if (appData.workouts_loaded) {
@@ -362,6 +389,7 @@ async function refreshStatus() {
             avatarImg.style.display = "none";
             avatarBadge.style.display = "flex";
             avatarBadge.textContent = "G";
+            resetAppData();
         }
 
         lucide.createIcons();
@@ -428,6 +456,10 @@ async function triggerRefresh() {
 
 // Fetch stats and render UI
 async function loadStats(forceRefresh = false) {
+    if (!appStatus.oauth_connected) {
+        return;
+    }
+
     const activeTabPane = document.querySelector(".tab-pane.active");
     const activeTabId = activeTabPane ? activeTabPane.id.replace("tab-", "") : "overview";
     
@@ -599,6 +631,7 @@ function handleMissingScopes(metric, missingScopes) {
 }
 
 async function loadMetric(metric, pageToken = "") {
+    if (!appStatus.oauth_connected) return;
     if (appData[`${metric}_loading`]) return;
     appData[`${metric}_loading`] = true;
     showLoadingSpinner(metric);
