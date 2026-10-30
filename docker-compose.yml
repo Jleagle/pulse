@@ -14,3 +14,4 @@ services:
       - CLIENT_ID=${CLIENT_ID:-}
       - CLIENT_SECRET=${CLIENT_SECRET:-}
       - REDIRECT_URL=${REDIRECT_URL:-http://localhost:8080/oauth/callback}
+      - PULSE_PASSWORD=${PULSE_PASSWORD:-}

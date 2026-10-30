@@ -17,6 +17,7 @@ func main() {
 		os.Getenv("PULSE_REDIRECT_URL"),
 		fmt.Sprintf("http://localhost:%s/oauth/callback", port),
 	)
+	password := cmp.Or(os.Getenv("PULSE_PASSWORD"), os.Getenv("PASSWORD"))
 
 	// 1. Initialize Stateless Service from environment variables
 	service := NewStatelessService(clientID, clientSecret, redirectURL)
@@ -31,7 +32,12 @@ func main() {
 
 	// 2. Initialize HTTP Server with routes
 	server := NewServer(service, redirectURL)
+	server.SetPassword(password)
 	handler := server.Routes()
+
+	if password != "" {
+		log.Println("[INFO] 🔒 HTTP Basic Authentication is enabled via PULSE_PASSWORD.")
+	}
 
 	addr := fmt.Sprintf(":%s", port)
 	log.Printf("🚀 Starting Pulse Self-Hosted Server on %s", addr)

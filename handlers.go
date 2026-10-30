@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/subtle"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -21,6 +22,7 @@ var webAssets embed.FS
 type Server struct {
 	service     *StatelessService
 	redirectURI string
+	password    string
 }
 
 func NewServer(service *StatelessService, redirectURI string) *Server {
@@ -28,6 +30,10 @@ func NewServer(service *StatelessService, redirectURI string) *Server {
 		service:     service,
 		redirectURI: redirectURI,
 	}
+}
+
+func (s *Server) SetPassword(password string) {
+	s.password = strings.TrimSpace(password)
 }
 
 func (s *Server) Routes() http.Handler {
@@ -67,7 +73,23 @@ func (s *Server) Routes() http.Handler {
 		fileServer.ServeHTTP(w, r)
 	}))
 
+	if s.password != "" {
+		return s.basicAuthMiddleware(mux)
+	}
 	return mux
+}
+
+func (s *Server) basicAuthMiddleware(next http.Handler) http.Handler {
+	expected := []byte(s.password)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, pass, ok := r.BasicAuth()
+		if !ok || subtle.ConstantTimeCompare([]byte(pass), expected) != 1 {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Pulse Self-Hosted"`)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) effectiveRedirectURI(r *http.Request) string {
