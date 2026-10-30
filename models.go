@@ -269,7 +269,14 @@ func decryptCookiePayload(encoded string) ([]byte, error) {
 	return plaintext, nil
 }
 
-func SetSessionCookie(w http.ResponseWriter, token *oauth2.Token) error {
+func isSecureRequest(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	return r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+}
+
+func SetSessionCookie(w http.ResponseWriter, r *http.Request, token *oauth2.Token) error {
 	tokenJSON, err := json.Marshal(token)
 	if err != nil {
 		return fmt.Errorf("failed to marshal token: %w", err)
@@ -285,6 +292,7 @@ func SetSessionCookie(w http.ResponseWriter, token *oauth2.Token) error {
 		Path:     "/",
 		MaxAge:   CookieMaxAge,
 		HttpOnly: true, // Secure against XSS
+		Secure:   isSecureRequest(r),
 		SameSite: http.SameSiteLaxMode,
 	}
 
@@ -320,7 +328,7 @@ func GetSessionCookie(r *http.Request) (*oauth2.Token, error) {
 	return &token, nil
 }
 
-func ClearSessionCookie(w http.ResponseWriter) {
+func ClearSessionCookie(w http.ResponseWriter, r *http.Request) {
 	cookie := &http.Cookie{
 		Name:     SessionCookieName,
 		Value:    "",
@@ -328,12 +336,13 @@ func ClearSessionCookie(w http.ResponseWriter) {
 		MaxAge:   -1,
 		Expires:  time.Unix(0, 0),
 		HttpOnly: true,
+		Secure:   isSecureRequest(r),
 		SameSite: http.SameSiteLaxMode,
 	}
 	http.SetCookie(w, cookie)
 }
 
-func SetOAuthStateCookie(w http.ResponseWriter) (string, error) {
+func SetOAuthStateCookie(w http.ResponseWriter, r *http.Request) (string, error) {
 	b := make([]byte, 16)
 	if _, err := io.ReadFull(rand.Reader, b); err != nil {
 		return "", err
@@ -345,6 +354,7 @@ func SetOAuthStateCookie(w http.ResponseWriter) (string, error) {
 		Path:     "/",
 		MaxAge:   600, // 10 minutes
 		HttpOnly: true,
+		Secure:   isSecureRequest(r),
 		SameSite: http.SameSiteLaxMode,
 	})
 	return state, nil
@@ -360,6 +370,7 @@ func ValidateOAuthStateCookie(w http.ResponseWriter, r *http.Request) bool {
 		MaxAge:   -1,
 		Expires:  time.Unix(0, 0),
 		HttpOnly: true,
+		Secure:   isSecureRequest(r),
 		SameSite: http.SameSiteLaxMode,
 	})
 	if err != nil || cookie.Value == "" || stateParam == "" {

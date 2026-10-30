@@ -118,7 +118,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	token, err := GetSessionCookie(r)
 	if err == nil && token != nil {
-		client, err := s.service.GetOAuthClient(r.Context(), token, w)
+		client, err := s.service.GetOAuthClient(r.Context(), token, w, r)
 		if err == nil {
 			oauthConnected = true
 			profile, err := s.service.FetchUserProfile(client)
@@ -132,7 +132,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			log.Printf("[WARNING] GetOAuthClient failed in handleStatus: %v", err)
-			ClearSessionCookie(w)
+			ClearSessionCookie(w, r)
 		}
 	} else if err != nil && !errors.Is(err, http.ErrNoCookie) && err.Error() != "empty session cookie" {
 		log.Printf("[DEBUG] GetSessionCookie error in handleStatus: %v", err)
@@ -189,7 +189,7 @@ func (s *Server) handleAuthURL(w http.ResponseWriter, r *http.Request) {
 		config.Scopes = scopes
 	}
 
-	state, err := SetOAuthStateCookie(w)
+	state, err := SetOAuthStateCookie(w, r)
 	if err != nil {
 		http.Error(w, "Failed to generate OAuth state token", http.StatusInternalServerError)
 		return
@@ -230,7 +230,7 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := SetSessionCookie(w, token); err != nil {
+	if err := SetSessionCookie(w, r, token); err != nil {
 		log.Printf("[ERROR] Failed to set session cookie: %v", err)
 		http.Redirect(w, r, "/?error=cookie_error", http.StatusFound)
 		return
@@ -241,7 +241,7 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
-	ClearSessionCookie(w)
+	ClearSessionCookie(w, r)
 	if r.Method == http.MethodGet {
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
@@ -257,9 +257,9 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client, err := s.service.GetOAuthClient(r.Context(), token, w)
+	client, err := s.service.GetOAuthClient(r.Context(), token, w, r)
 	if err != nil {
-		ClearSessionCookie(w)
+		ClearSessionCookie(w, r)
 		http.Error(w, "Unauthorized: Invalid or expired session", http.StatusUnauthorized)
 		return
 	}
@@ -308,9 +308,9 @@ func (s *Server) handleExerciseRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client, err := s.service.GetOAuthClient(r.Context(), token, w)
+	client, err := s.service.GetOAuthClient(r.Context(), token, w, r)
 	if err != nil {
-		ClearSessionCookie(w)
+		ClearSessionCookie(w, r)
 		http.Error(w, "Unauthorized: Invalid or expired session", http.StatusUnauthorized)
 		return
 	}

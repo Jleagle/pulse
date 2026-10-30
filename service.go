@@ -350,7 +350,7 @@ func (s *StatelessService) GetOAuthConfig(redirectURI string) *oauth2.Config {
 }
 
 // Helper to get OAuth Client and auto-refresh token in cookie if changed
-func (s *StatelessService) GetOAuthClient(ctx context.Context, token *oauth2.Token, w http.ResponseWriter) (*http.Client, error) {
+func (s *StatelessService) GetOAuthClient(ctx context.Context, token *oauth2.Token, w http.ResponseWriter, r *http.Request) (*http.Client, error) {
 	cID, cSec, _ := s.GetCredentials()
 	if cID == "" || cSec == "" {
 		return nil, fmt.Errorf("server OAuth client credentials are not configured")
@@ -365,7 +365,7 @@ func (s *StatelessService) GetOAuthClient(ctx context.Context, token *oauth2.Tok
 
 	// If token refreshed, update browser cookie
 	if newToken.AccessToken != token.AccessToken && w != nil {
-		_ = SetSessionCookie(w, newToken)
+		_ = SetSessionCookie(w, r, newToken)
 	}
 
 	return oauth2.NewClient(ctx, ts), nil
