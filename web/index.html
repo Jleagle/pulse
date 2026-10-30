@@ -16,7 +16,7 @@
     <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link rel="stylesheet" href="index.css?v=20261031_clean">
+    <link rel="stylesheet" href="index.css?v=20261031_fix">
 </head>
 <body>
     <div class="app-container">
@@ -78,7 +78,7 @@
                     <h1 id="page-title">Dashboard Overview</h1>
                 </div>
                 <div class="user-badge" id="user-badge-container" onclick="switchTab('settings')" title="Click to open Settings & login" style="cursor: pointer;">
-                    <img id="avatar-img" class="avatar-img" src="" alt="Avatar" style="display: none; width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid var(--color-purple);">
+                    <img id="avatar-img" class="avatar-img" referrerpolicy="no-referrer" alt="Avatar" style="display: none; width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid var(--color-purple);">
                     <div class="avatar" id="avatar-badge">G</div>
                     <span id="user-name">Guest</span>
                 </div>
@@ -182,6 +182,45 @@
 
             <!-- TAB: SLEEP ANALYSIS -->
             <section id="tab-sleep" class="tab-pane">
+                <!-- Single-Night Sleep Inspector (Fitbit / Google Health Style) -->
+                <div class="dashboard-charts-grid mb-6">
+                    <div class="chart-panel glass-panel">
+                        <div class="chart-header">
+                            <div>
+                                <h3 id="sleep-detail-title">Overnight Sleep Hypnogram</h3>
+                                <p class="chart-subtitle" id="sleep-detail-subtitle">Select any sleep session in the log below to inspect its stage timeline</p>
+                            </div>
+                            <span class="badge" id="sleep-efficiency-badge">No Session Selected</span>
+                        </div>
+                        <div class="chart-container" style="height: 290px;">
+                            <canvas id="chart-sleep-hypnogram"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-panel glass-panel" style="display: flex; flex-direction: column; justify-content: space-between;">
+                        <div>
+                            <div class="chart-header">
+                                <div>
+                                    <h3>Session Stage Proportions</h3>
+                                    <p class="chart-subtitle" id="sleep-proportions-subtitle">Time and percentage spent in Awake, REM, Light, and Deep sleep</p>
+                                </div>
+                            </div>
+                            <div class="chart-container" style="height: 215px;">
+                                <canvas id="chart-sleep-session-stages"></canvas>
+                            </div>
+                        </div>
+
+                        <div id="sleep-stages-bar-container" style="margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border-color);">
+                            <div style="display: flex; justify-content: space-between; font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 8px;">
+                                <span><strong>Stage Breakdown</strong></span>
+                                <span id="sleep-stages-summary">Deep / REM / Light / Awake</span>
+                            </div>
+                            <div id="sleep-stages-bar" style="display: flex; height: 10px; border-radius: 6px; overflow: hidden; background: rgba(255,255,255,0.06);"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Multi-Night Sleep Trends -->
                 <div class="dashboard-charts-grid mb-6">
                     <div class="chart-panel glass-panel">
                         <div class="chart-header">
@@ -199,7 +238,7 @@
                         <div class="chart-header">
                             <div>
                                 <h3>Sleep Stages Breakdown</h3>
-                                <p class="chart-subtitle">Deep, REM, Light, and Awake durations</p>
+                                <p class="chart-subtitle">Deep, REM, Light, and Awake durations across nights</p>
                             </div>
                         </div>
                         <div class="chart-container">
@@ -211,7 +250,6 @@
                 <div class="table-panel glass-panel">
                     <div class="table-header">
                         <h3>Sleep History Log</h3>
-                        <span class="badge">Live Memory View</span>
                     </div>
                     <div class="table-responsive">
                         <table class="data-table" id="sleep-history-table">
@@ -223,11 +261,12 @@
                                     <th>Total Sleep</th>
                                     <th>Asleep</th>
                                     <th>Awake</th>
-                                    <th>Type</th>
+                                    <th>Efficiency</th>
+                                    <th>Timeline</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No records loaded. Connect Google Health to view live sleep logs.</td></tr>
+                                <tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No records loaded. Connect Google Health to view live sleep logs.</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -771,6 +810,6 @@
         </main>
     </div>
 
-    <script src="app.js?v=20261031_clean"></script>
+    <script src="app.js?v=20261031_sleep_inspector"></script>
 </body>
 </html>

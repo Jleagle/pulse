@@ -51,9 +51,15 @@ let workoutMapLoaded = false;
 let pendingRouteRender = null;
 let workoutMarkers = [];
 let selectedExerciseId = "";
+let selectedSleepId = "";
+
+const CACHE_KEY = "pulse_app_cache_v2";
 
 function resetAppData() {
-    try { localStorage.removeItem("pulse_app_cache"); } catch (e) {}
+    try {
+        localStorage.removeItem("pulse_app_cache");
+        localStorage.removeItem(CACHE_KEY);
+    } catch (e) {}
     appData = {
         overview_loaded: false,
         sleep_sessions: [],
@@ -107,7 +113,7 @@ function resetAppData() {
     }
 
     const sleepTbody = document.querySelector("#sleep-history-table tbody");
-    if (sleepTbody) sleepTbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
+    if (sleepTbody) sleepTbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
     const heartTbody = document.querySelector("#heart-history-table tbody");
     if (heartTbody) heartTbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
     const actTbody = document.querySelector("#activity-history-table tbody");
@@ -157,7 +163,7 @@ function saveCache() {
                 nutrition_loaded: appData.nutrition_loaded
             }
         };
-        localStorage.setItem("pulse_app_cache", JSON.stringify(cachePayload));
+        localStorage.setItem(CACHE_KEY, JSON.stringify(cachePayload));
     } catch (e) {
         console.warn("Failed to save to localStorage:", e);
     }
@@ -165,7 +171,7 @@ function saveCache() {
 
 function loadCache() {
     try {
-        const raw = localStorage.getItem("pulse_app_cache");
+        const raw = localStorage.getItem(CACHE_KEY);
         if (!raw) return false;
         const cached = JSON.parse(raw);
         if (cached.horizon === currentHorizonDays && cached.data && (Date.now() - cached.timestamp < 6 * 60 * 60 * 1000)) {
@@ -361,14 +367,22 @@ async function refreshStatus() {
 
             // Update user badge
             userNameEl.textContent = appStatus.user_name || appStatus.user_email || "User";
+            const initial = (appStatus.user_name || appStatus.user_email || "U")[0].toUpperCase();
+            avatarBadge.textContent = initial;
             if (appStatus.user_picture) {
+                avatarImg.referrerPolicy = "no-referrer";
+                avatarImg.onerror = () => {
+                    avatarImg.style.display = "none";
+                    avatarBadge.style.display = "flex";
+                };
+                avatarImg.onload = () => {
+                    avatarImg.style.display = "inline-block";
+                    avatarBadge.style.display = "none";
+                };
                 avatarImg.src = appStatus.user_picture;
-                avatarImg.style.display = "inline-block";
-                avatarBadge.style.display = "none";
             } else {
                 avatarImg.style.display = "none";
                 avatarBadge.style.display = "flex";
-                avatarBadge.textContent = (appStatus.user_name || "U")[0].toUpperCase();
             }
         } else {
             authIcon.className = "";
@@ -422,7 +436,10 @@ async function logout() {
         return;
     }
 
-    try { localStorage.removeItem("pulse_app_cache"); } catch (e) {}
+    try {
+        localStorage.removeItem("pulse_app_cache");
+        localStorage.removeItem(CACHE_KEY);
+    } catch (e) {}
 
     try {
         const res = await fetch("/api/logout", { method: "POST" });
@@ -462,7 +479,7 @@ async function loadStats(forceRefresh = false) {
     const activeTabId = activeTabPane ? activeTabPane.id.replace("tab-", "") : "overview";
     
     if (!forceRefresh && loadCache()) {
-        const raw = localStorage.getItem("pulse_app_cache");
+        const raw = localStorage.getItem(CACHE_KEY);
         const cacheAgeMin = raw ? Math.round((Date.now() - JSON.parse(raw).timestamp) / 60000) : 0;
         // Suppress green success toast when loading from browser cache as requested by user
         
@@ -537,7 +554,7 @@ function showLoadingSpinner(metric) {
     if (metric === "sleep") {
         const tbody = document.querySelector("#sleep-history-table tbody");
         if (tbody && (!appData.sleep_sessions || appData.sleep_sessions.length === 0)) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 3rem 0;"><div style="display: inline-flex; align-items: center; gap: 10px; color: var(--text-muted); font-weight: 500;"><i data-lucide="loader" class="spin" style="width: 22px; height: 22px; color: var(--primary-color);"></i> Loading sleep history from Google Health...</div></td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 3rem 0;"><div style="display: inline-flex; align-items: center; gap: 10px; color: var(--text-muted); font-weight: 500;"><i data-lucide="loader" class="spin" style="width: 22px; height: 22px; color: var(--primary-color);"></i> Loading sleep history from Google Health...</div></td></tr>`;
         }
     } else if (metric === "heart" || metric === "rhr" || metric === "hrv") {
         const tbody = document.querySelector("#heart-history-table tbody");
@@ -821,6 +838,20 @@ function populateOverviewCards(data) {
     }
 }
 
+function normalizeSleepStage(rawType) {
+    const t = (rawType || "").toUpperCase();
+    if (t.includes("DEEP")) return "DEEP";
+    if (t.includes("REM")) return "REM";
+    if (t.includes("AWAKE") || t.includes("RESTLESS") || t.includes("WAKE")) return "AWAKE";
+    return "LIGHT";
+}
+
+function formatHoursMins(minsTotal) {
+    const hrs = Math.floor(minsTotal / 60);
+    const mins = minsTotal % 60;
+    return hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+}
+
 function populateSleepTable(sessions) {
     const sleepTbody = document.querySelector("#sleep-history-table tbody");
     if (!sleepTbody) return;
@@ -828,27 +859,240 @@ function populateSleepTable(sessions) {
     if (sessions && sessions.length > 0) {
         sessions.forEach(s => {
             const tr = document.createElement("tr");
+            tr.style.cursor = "pointer";
+            tr.id = `sleep-row-${s.id}`;
+            tr.onclick = () => selectSleepSession(s);
+
             const st = new Date(s.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const et = new Date(s.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            const sDate = new Date(s.start_time).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+            const sDate = new Date(s.end_time || s.start_time).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
             
             const hrs = Math.floor(s.duration_minutes / 60);
             const mins = s.duration_minutes % 60;
+            const eff = s.duration_minutes > 0 ? Math.round((s.minutes_asleep / s.duration_minutes) * 100) : 0;
+            const effClass = eff >= 85 ? "badge badge-optimal" : (eff >= 75 ? "badge badge-normal" : "badge badge-warning");
             
             tr.innerHTML = `
-                <td>${sDate}</td>
+                <td><strong>${sDate}</strong></td>
                 <td>${st}</td>
                 <td>${et}</td>
                 <td>${hrs}h ${mins}m</td>
-                <td>${s.minutes_asleep}m</td>
+                <td><strong>${formatHoursMins(s.minutes_asleep)}</strong></td>
                 <td>${s.minutes_awake}m</td>
-                <td><span class="badge badge-outline">${s.sleep_type}</span></td>
+                <td><span class="${effClass}">${eff}%</span></td>
+                <td><button class="btn btn-secondary" style="padding: 5px 11px; font-size: 0.78rem;" onclick="event.stopPropagation(); selectSleepSessionById('${s.id}')"><i data-lucide="bar-chart-2" style="width: 13px; height: 13px;"></i> View Stages</button></td>
             `;
             sleepTbody.appendChild(tr);
         });
+        if (typeof lucide !== "undefined" && lucide.createIcons) lucide.createIcons();
+
+        const targetSession = sessions.find(s => s.id === selectedSleepId) || sessions[0];
+        if (targetSession) {
+            selectSleepSession(targetSession);
+        }
     } else {
-        sleepTbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No records found. Click sync to retrieve your health statistics.</td></tr>`;
+        sleepTbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
     }
+}
+
+function selectSleepSessionById(id) {
+    const s = (appData.sleep_sessions || []).find(item => item.id === id);
+    if (s) selectSleepSession(s);
+}
+
+function selectSleepSession(session) {
+    if (!session) return;
+    selectedSleepId = session.id;
+
+    // Highlight selected row
+    document.querySelectorAll("#sleep-history-table tbody tr").forEach(tr => {
+        tr.style.background = tr.id === `sleep-row-${session.id}` ? "rgba(139, 92, 246, 0.12)" : "";
+    });
+
+    const titleEl = document.getElementById("sleep-detail-title");
+    const subEl = document.getElementById("sleep-detail-subtitle");
+    const badgeEl = document.getElementById("sleep-efficiency-badge");
+
+    const wakeDateStr = new Date(session.end_time || session.start_time).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    const bedTimeStr = new Date(session.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const wakeTimeStr = new Date(session.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const eff = session.duration_minutes > 0 ? Math.round((session.minutes_asleep / session.duration_minutes) * 100) : 0;
+
+    if (titleEl) titleEl.textContent = `Sleep Session — ${wakeDateStr}`;
+    if (subEl) {
+        subEl.textContent = `${bedTimeStr} → ${wakeTimeStr} • ${formatHoursMins(session.duration_minutes)} in bed • ${formatHoursMins(session.minutes_asleep)} asleep • ${session.minutes_awake}m awake`;
+    }
+    if (badgeEl) {
+        badgeEl.textContent = `${eff}% Sleep Efficiency`;
+        badgeEl.className = eff >= 85 ? "badge badge-optimal" : (eff >= 75 ? "badge badge-normal" : "badge badge-warning");
+    }
+
+    // Calculate stage totals for this session
+    let deepMins = 0, remMins = 0, lightMins = 0, awakeMins = 0;
+    const rawStages = (session.stages || []).slice().sort((a, b) => (a.start_time > b.start_time ? 1 : -1));
+
+    if (rawStages.length > 0) {
+        rawStages.forEach(st => {
+            const cat = normalizeSleepStage(st.stage_type);
+            let dur = st.duration_minutes || 0;
+            if (dur <= 0 && st.start_time && st.end_time) {
+                dur = Math.max(1, Math.round((new Date(st.end_time) - new Date(st.start_time)) / 60000));
+            }
+            if (cat === "DEEP") deepMins += dur;
+            else if (cat === "REM") remMins += dur;
+            else if (cat === "AWAKE") awakeMins += dur;
+            else lightMins += dur;
+        });
+    } else {
+        remMins = Math.round(session.minutes_asleep * 0.20);
+        deepMins = Math.round(session.minutes_asleep * 0.15);
+        lightMins = Math.max(0, session.minutes_asleep - remMins - deepMins);
+        awakeMins = session.minutes_awake || 0;
+    }
+
+    const totalStageMins = Math.max(1, deepMins + remMins + lightMins + awakeMins);
+    const deepPct = Math.round((deepMins / totalStageMins) * 100);
+    const remPct = Math.round((remMins / totalStageMins) * 100);
+    const lightPct = Math.round((lightMins / totalStageMins) * 100);
+    const awakePct = Math.round((awakeMins / totalStageMins) * 100);
+
+    const summaryEl = document.getElementById("sleep-stages-summary");
+    if (summaryEl) {
+        summaryEl.textContent = `Deep ${formatHoursMins(deepMins)} (${deepPct}%) • REM ${formatHoursMins(remMins)} (${remPct}%) • Light ${formatHoursMins(lightMins)} (${lightPct}%) • Awake ${formatHoursMins(awakeMins)} (${awakePct}%)`;
+    }
+    const barEl = document.getElementById("sleep-stages-bar");
+    if (barEl) {
+        barEl.innerHTML = `
+            <div style="width: ${(deepMins / totalStageMins) * 100}%; background: #a855f7;" title="Deep: ${formatHoursMins(deepMins)} (${deepPct}%)"></div>
+            <div style="width: ${(remMins / totalStageMins) * 100}%; background: #38bdf8;" title="REM: ${formatHoursMins(remMins)} (${remPct}%)"></div>
+            <div style="width: ${(lightMins / totalStageMins) * 100}%; background: #818cf8;" title="Light: ${formatHoursMins(lightMins)} (${lightPct}%)"></div>
+            <div style="width: ${(awakeMins / totalStageMins) * 100}%; background: #f43f5e;" title="Awake: ${formatHoursMins(awakeMins)} (${awakePct}%)"></div>
+        `;
+    }
+
+    // 1. Render Stepped Hypnogram Chart
+    const stageLevelMap = { DEEP: 1, LIGHT: 2, REM: 3, AWAKE: 4 };
+    const stageNameMap = { 1: "Deep Sleep", 2: "Light Sleep", 3: "REM Sleep", 4: "Awake" };
+    const stageColorMap = { 1: "#a855f7", 2: "#818cf8", 3: "#38bdf8", 4: "#f43f5e" };
+
+    const hypnoLabels = [];
+    const hypnoValues = [];
+
+    if (rawStages.length > 0) {
+        const startMs = new Date(rawStages[0].start_time || session.start_time).getTime();
+        const endMs = new Date(rawStages[rawStages.length - 1].end_time || session.end_time).getTime();
+        const stepMs = 2 * 60 * 1000; // 2-minute intervals for true time-proportional x-axis
+
+        const parsedIntervals = rawStages.map(st => ({
+            s: new Date(st.start_time).getTime(),
+            e: new Date(st.end_time).getTime(),
+            lvl: stageLevelMap[normalizeSleepStage(st.stage_type)] || 2
+        }));
+
+        for (let t = startMs; t <= endMs; t += stepMs) {
+            hypnoLabels.push(new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+            const active = parsedIntervals.find(iv => t >= iv.s && t <= iv.e);
+            hypnoValues.push(active ? active.lvl : 2);
+        }
+    } else {
+        hypnoLabels.push(bedTimeStr, wakeTimeStr);
+        hypnoValues.push(2, 2);
+    }
+
+    renderChart("chart-sleep-hypnogram", {
+        type: 'line',
+        data: {
+            labels: hypnoLabels,
+            datasets: [{
+                label: 'Sleep Stage',
+                data: hypnoValues,
+                stepped: true,
+                borderWidth: 3,
+                pointRadius: 0,
+                pointHoverRadius: 5,
+                fill: true,
+                backgroundColor: 'rgba(129, 140, 248, 0.08)',
+                borderColor: '#818cf8',
+                segment: {
+                    borderColor: ctx => stageColorMap[ctx.p0.parsed.y] || '#818cf8'
+                }
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => ` ${stageNameMap[ctx.parsed.y] || 'Sleep'}`
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: 'rgba(255,255,255,0.03)' },
+                    ticks: { color: '#94a3b8', maxTicksLimit: 9 }
+                },
+                y: {
+                    min: 0.6,
+                    max: 4.4,
+                    grid: { color: 'rgba(255,255,255,0.04)' },
+                    ticks: {
+                        color: '#e2e8f0',
+                        stepSize: 1,
+                        callback: val => ({ 1: 'Deep', 2: 'Light', 3: 'REM', 4: 'Awake' }[val] || '')
+                    }
+                }
+            }
+        }
+    });
+
+    // 2. Render Session Stage Proportions Horizontal Bar Chart
+    renderChart("chart-sleep-session-stages", {
+        type: 'bar',
+        data: {
+            labels: [
+                `Deep (${deepPct}%)`,
+                `REM (${remPct}%)`,
+                `Light (${lightPct}%)`,
+                `Awake (${awakePct}%)`
+            ],
+            datasets: [{
+                label: 'Minutes',
+                data: [deepMins, remMins, lightMins, awakeMins],
+                backgroundColor: ['#a855f7', '#38bdf8', '#818cf8', '#f43f5e'],
+                borderRadius: 6,
+                barThickness: 22
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => ` ${formatHoursMins(ctx.parsed.x)} (${ctx.parsed.x} mins)`
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    grid: { color: 'rgba(255,255,255,0.03)' },
+                    ticks: { color: '#94a3b8' },
+                    title: { display: true, text: 'Minutes', color: '#94a3b8' }
+                },
+                y: {
+                    grid: { display: false },
+                    ticks: { color: '#e2e8f0', font: { weight: '600' } }
+                }
+            }
+        }
+    });
 }
 
 function populateHeartTable(rhrRecords, hrvRecords, vo2Records, zoneRecords) {
@@ -1159,12 +1403,11 @@ function renderSleepCharts(data) {
         if (s.stages && s.stages.length > 0) {
             s.stages.forEach(st => {
                 const dur = st.duration_minutes;
-                switch (st.stage_type) {
-                    case "REM": rem += dur; break;
-                    case "DEEP": deep += dur; break;
-                    case "LIGHT": case "ASLEEP": light += dur; break;
-                    case "AWAKE": case "RESTLESS": awake += dur; break;
-                }
+                const cat = normalizeSleepStage(st.stage_type);
+                if (cat === "REM") rem += dur;
+                else if (cat === "DEEP") deep += dur;
+                else if (cat === "AWAKE") awake += dur;
+                else light += dur;
             });
         } else {
             rem = Math.round(s.minutes_asleep * 0.20);

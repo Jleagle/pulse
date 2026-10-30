@@ -102,8 +102,8 @@ type SampleTimeAPI struct {
 }
 
 type DistanceAPI struct {
-	DistanceMillimeters float64                 `json:"distanceMillimeters"`
-	Millimeters         float64                 `json:"millimeters"`
+	DistanceMillimeters interface{}             `json:"distanceMillimeters"`
+	Millimeters         interface{}             `json:"millimeters"`
 	Interval            ObservationTimeInterval `json:"interval"`
 }
 
@@ -118,7 +118,7 @@ type FloorsAPI struct {
 }
 
 type BasalEnergyBurnedAPI struct {
-	Kcal     float64                 `json:"kcal"`
+	Kcal     interface{}             `json:"kcal"`
 	Interval ObservationTimeInterval `json:"interval"`
 }
 
@@ -130,15 +130,15 @@ type TimeInHeartRateZoneAPI struct {
 }
 
 type DailyVO2MaxAPI struct {
-	Date        Date    `json:"date"`
-	VO2Max      float64 `json:"vo2Max"`
-	VO2MaxValue float64 `json:"vo2MaxValue"`
+	Date        Date        `json:"date"`
+	VO2Max      interface{} `json:"vo2Max"`
+	VO2MaxValue interface{} `json:"vo2MaxValue"`
 }
 
 type VO2MaxAPI struct {
 	SampleTime  SampleTimeAPI `json:"sampleTime"`
-	VO2MaxValue float64       `json:"vo2MaxValue"`
-	VO2Max      float64       `json:"vo2Max"`
+	VO2MaxValue interface{}   `json:"vo2MaxValue"`
+	VO2Max      interface{}   `json:"vo2Max"`
 }
 
 type HeartRateZoneDurationsAPI struct {
@@ -149,10 +149,10 @@ type HeartRateZoneDurationsAPI struct {
 }
 
 type ExerciseMetricsSummaryAPI struct {
-	CaloriesKcal                   float64                    `json:"caloriesKcal"`
-	DistanceMillimeters            float64                    `json:"distanceMillimeters"`
+	CaloriesKcal                   interface{}                `json:"caloriesKcal"`
+	DistanceMillimeters            interface{}                `json:"distanceMillimeters"`
 	Steps                          interface{}                `json:"steps"`
-	AverageHeartRateBeatsPerMinute float64                    `json:"averageHeartRateBeatsPerMinute"`
+	AverageHeartRateBeatsPerMinute interface{}                `json:"averageHeartRateBeatsPerMinute"`
 	ActiveZoneMinutes              interface{}                `json:"activeZoneMinutes"`
 	HeartRateZoneDurations         *HeartRateZoneDurationsAPI `json:"heartRateZoneDurations,omitempty"`
 }
@@ -161,46 +161,46 @@ type ExerciseAPI struct {
 	Interval                       SessionTimeInterval        `json:"interval"`
 	ExerciseType                   string                     `json:"exerciseType"`
 	DisplayName                    string                     `json:"displayName"`
-	CaloriesKcal                   float64                    `json:"caloriesKcal"`
-	DistanceMillimeters            float64                    `json:"distanceMillimeters"`
+	CaloriesKcal                   interface{}                `json:"caloriesKcal"`
+	DistanceMillimeters            interface{}                `json:"distanceMillimeters"`
 	Steps                          interface{}                `json:"steps"`
-	AverageHeartRateBeatsPerMinute float64                    `json:"averageHeartRateBeatsPerMinute"`
+	AverageHeartRateBeatsPerMinute interface{}                `json:"averageHeartRateBeatsPerMinute"`
 	HeartRateZoneDurations         *HeartRateZoneDurationsAPI `json:"heartRateZoneDurations,omitempty"`
 	MetricsSummary                 *ExerciseMetricsSummaryAPI `json:"metricsSummary,omitempty"`
 }
 
 type DailyOxygenSaturationAPI struct {
-	Date                 Date    `json:"date"`
-	AveragePercentage    float64 `json:"averagePercentage"`
-	LowerBoundPercentage float64 `json:"lowerBoundPercentage"`
-	UpperBoundPercentage float64 `json:"upperBoundPercentage"`
+	Date                 Date        `json:"date"`
+	AveragePercentage    interface{} `json:"averagePercentage"`
+	LowerBoundPercentage interface{} `json:"lowerBoundPercentage"`
+	UpperBoundPercentage interface{} `json:"upperBoundPercentage"`
 }
 
 type DailyRespiratoryRateAPI struct {
-	Date             Date    `json:"date"`
-	RateBpm          float64 `json:"rateBpm"`
-	BreathsPerMinute float64 `json:"breathsPerMinute"`
+	Date             Date        `json:"date"`
+	RateBpm          interface{} `json:"rateBpm"`
+	BreathsPerMinute interface{} `json:"breathsPerMinute"`
 }
 
 type DailySleepTemperatureDerivationsAPI struct {
-	Date                            Date     `json:"date"`
-	NightlyTemperatureCelsius       float64  `json:"nightlyTemperatureCelsius"`
-	BaselineTemperatureCelsius      *float64 `json:"baselineTemperatureCelsius"`
-	RelativeNightlyStddev30dCelsius *float64 `json:"relativeNightlyStddev30dCelsius"`
+	Date                            Date        `json:"date"`
+	NightlyTemperatureCelsius       interface{} `json:"nightlyTemperatureCelsius"`
+	BaselineTemperatureCelsius      interface{} `json:"baselineTemperatureCelsius"`
+	RelativeNightlyStddev30dCelsius interface{} `json:"relativeNightlyStddev30dCelsius"`
 }
 
 type WeightAPI struct {
 	SampleTime  SampleTimeAPI `json:"sampleTime"`
-	WeightGrams float64       `json:"weightGrams"`
+	WeightGrams interface{}   `json:"weightGrams"`
 }
 
 type BodyFatAPI struct {
 	SampleTime SampleTimeAPI `json:"sampleTime"`
-	Percentage float64       `json:"percentage"`
+	Percentage interface{}   `json:"percentage"`
 }
 
 type HydrationAmountAPI struct {
-	Milliliters float64 `json:"milliliters"`
+	Milliliters interface{} `json:"milliliters"`
 }
 
 type HydrationLogAPI struct {
@@ -209,8 +209,8 @@ type HydrationLogAPI struct {
 }
 
 type NutrientQuantityAPI struct {
-	Grams      float64 `json:"grams"`
-	Milligrams float64 `json:"milligrams"`
+	Grams      interface{} `json:"grams"`
+	Milligrams interface{} `json:"milligrams"`
 }
 
 type NutrientEntryAPI struct {
@@ -219,11 +219,11 @@ type NutrientEntryAPI struct {
 }
 
 type EnergyValueAPI struct {
-	Kcal float64 `json:"kcal"`
+	Kcal interface{} `json:"kcal"`
 }
 
 type MacroGramsAPI struct {
-	Grams float64 `json:"grams"`
+	Grams interface{} `json:"grams"`
 }
 
 type NutritionLogAPI struct {
@@ -417,11 +417,11 @@ func (s *StatelessService) FetchAllStats(client *http.Client, days int, metric, 
 	fetchSlp := metric == "" || metric == "overview" || metric == "sleep"
 	fetchR := metric == "" || metric == "overview" || metric == "heart" || metric == "rhr"
 	fetchH := metric == "" || metric == "overview" || metric == "heart" || metric == "hrv"
-	fetchHeartExtra := metric == "" || metric == "overview" || metric == "heart" || metric == "vitals"
+	fetchHeartExtra := metric == "" || metric == "heart"
 	fetchA := metric == "" || metric == "overview" || metric == "activity"
-	fetchW := metric == "" || metric == "overview" || metric == "workouts"
-	fetchV := metric == "" || metric == "overview" || metric == "vitals"
-	fetchN := metric == "" || metric == "overview" || metric == "nutrition"
+	fetchW := metric == "" || metric == "workouts"
+	fetchV := metric == "" || metric == "vitals"
+	fetchN := metric == "" || metric == "nutrition"
 
 	if fetchSlp {
 		wg.Add(1)
@@ -971,7 +971,7 @@ func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDat
 					if dp.BasalEnergyBurned != nil {
 						d := getDateStr(dp.BasalEnergyBurned.Interval.CivilStartTime, dp.BasalEnergyBurned.Interval.StartTime)
 						if d != "" {
-							basalMap[d] += int(dp.BasalEnergyBurned.Kcal)
+							basalMap[d] += parseAnyInt(dp.BasalEnergyBurned.Kcal)
 						}
 					}
 				}
@@ -1014,9 +1014,9 @@ func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDat
 					if dp.Distance != nil {
 						d := getDateStr(dp.Distance.Interval.CivilStartTime, dp.Distance.Interval.StartTime)
 						if d != "" {
-							mm := dp.Distance.DistanceMillimeters
+							mm := parseAnyFloat(dp.Distance.DistanceMillimeters)
 							if mm == 0 {
-								mm = dp.Distance.Millimeters
+								mm = parseAnyFloat(dp.Distance.Millimeters)
 							}
 							distanceMap[d] += mm / 1000000.0
 						}
@@ -1172,9 +1172,9 @@ func (s *StatelessService) fetchHRZonesAndVO2Max(client *http.Client, startDateS
 				for _, dp := range listResp.DataPoints {
 					if dp.DailyVO2Max != nil {
 						d := dp.DailyVO2Max.Date.String()
-						val := dp.DailyVO2Max.VO2Max
+						val := parseAnyFloat(dp.DailyVO2Max.VO2Max)
 						if val == 0 {
-							val = dp.DailyVO2Max.VO2MaxValue
+							val = parseAnyFloat(dp.DailyVO2Max.VO2MaxValue)
 						}
 						if d >= startDateStr && val > 0 {
 							vo2Map[d] = math.Round(val*10) / 10
@@ -1200,9 +1200,9 @@ func (s *StatelessService) fetchHRZonesAndVO2Max(client *http.Client, startDateS
 							} else if t, err := time.Parse(time.RFC3339, dp.VO2Max.SampleTime.PhysicalTime); err == nil {
 								d = t.Format("2006-01-02")
 							}
-							val := dp.VO2Max.VO2MaxValue
+							val := parseAnyFloat(dp.VO2Max.VO2MaxValue)
 							if val == 0 {
-								val = dp.VO2Max.VO2Max
+								val = parseAnyFloat(dp.VO2Max.VO2Max)
 							}
 							if d >= startDateStr && val > 0 {
 								vo2Map[d] = math.Round(val*10) / 10
@@ -1236,23 +1236,31 @@ func parseDurationMinutes(durStr string) int {
 	return 0
 }
 
-func parseAnyInt(v interface{}) int {
+func parseAnyFloat(v interface{}) float64 {
 	switch val := v.(type) {
-	case string:
-		n, _ := strconv.Atoi(val)
-		return n
 	case float64:
-		return int(val)
-	case int:
 		return val
+	case float32:
+		return float64(val)
+	case int:
+		return float64(val)
+	case int64:
+		return float64(val)
+	case string:
+		f, _ := strconv.ParseFloat(strings.TrimSpace(val), 64)
+		return f
 	}
 	return 0
+}
+
+func parseAnyInt(v interface{}) int {
+	return int(math.Round(parseAnyFloat(v)))
 }
 
 func (s *StatelessService) fetchExercises(client *http.Client, startStr, pageToken string) ([]ExerciseSession, string, error) {
 	u, _ := url.Parse("https://health.googleapis.com/v4/users/me/dataTypes/exercise/dataPoints")
 	q := u.Query()
-	q.Set("pageSize", "25")
+	q.Set("pageSize", "50000")
 	if pageToken != "" {
 		q.Set("pageToken", pageToken)
 	}
@@ -1271,6 +1279,7 @@ func (s *StatelessService) fetchExercises(client *http.Client, startStr, pageTok
 
 	var listResp ListDataPointsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		fmt.Printf("[Stateless Fetch] Exercise JSON decode error: %v\n", err)
 		return nil, "", err
 	}
 
@@ -1283,33 +1292,39 @@ func (s *StatelessService) fetchExercises(client *http.Client, startStr, pageTok
 		parts := strings.Split(dp.Name, "/")
 		exID := parts[len(parts)-1]
 
+		startRaw := ex.Interval.StartTime
+		endRaw := ex.Interval.EndTime
+		if startRaw == "" && ex.Interval.CivilStartTime != nil {
+			startRaw = ex.Interval.CivilStartTime.Date.String() + "T00:00:00Z"
+		}
+
 		duration := 0
-		st, err1 := time.Parse(time.RFC3339, ex.Interval.StartTime)
-		et, err2 := time.Parse(time.RFC3339, ex.Interval.EndTime)
+		st, err1 := time.Parse(time.RFC3339, startRaw)
+		et, err2 := time.Parse(time.RFC3339, endRaw)
 		if err1 == nil && err2 == nil {
 			duration = int(math.Round(et.Sub(st).Minutes()))
 		}
 
-		cals := int(ex.CaloriesKcal)
-		distMm := ex.DistanceMillimeters
+		cals := parseAnyInt(ex.CaloriesKcal)
+		distMm := parseAnyFloat(ex.DistanceMillimeters)
 		steps := parseAnyInt(ex.Steps)
-		avgHr := int(ex.AverageHeartRateBeatsPerMinute)
+		avgHr := parseAnyInt(ex.AverageHeartRateBeatsPerMinute)
 		azm := 0
 		var hz *HeartRateZoneDurationsAPI = ex.HeartRateZoneDurations
 
 		if ex.MetricsSummary != nil {
 			ms := ex.MetricsSummary
-			if ms.CaloriesKcal > 0 {
-				cals = int(ms.CaloriesKcal)
+			if c := parseAnyInt(ms.CaloriesKcal); c > 0 {
+				cals = c
 			}
-			if ms.DistanceMillimeters > 0 {
-				distMm = ms.DistanceMillimeters
+			if d := parseAnyFloat(ms.DistanceMillimeters); d > 0 {
+				distMm = d
 			}
 			if s := parseAnyInt(ms.Steps); s > 0 {
 				steps = s
 			}
-			if ms.AverageHeartRateBeatsPerMinute > 0 {
-				avgHr = int(ms.AverageHeartRateBeatsPerMinute)
+			if hr := parseAnyInt(ms.AverageHeartRateBeatsPerMinute); hr > 0 {
+				avgHr = hr
 			}
 			azm = parseAnyInt(ms.ActiveZoneMinutes)
 			if ms.HeartRateZoneDurations != nil {
@@ -1338,11 +1353,11 @@ func (s *StatelessService) fetchExercises(client *http.Client, startStr, pageTok
 		upperType := strings.ToUpper(exType)
 		hasGPS := distKm > 0 || strings.Contains(upperType, "RUN") || strings.Contains(upperType, "WALK") || strings.Contains(upperType, "BIK") || strings.Contains(upperType, "CYCL") || strings.Contains(upperType, "HIK")
 
-		if pageToken != "" || ex.Interval.StartTime >= startStr || ex.Interval.EndTime >= startStr {
+		if pageToken != "" || startRaw >= startStr || endRaw >= startStr || startRaw == "" {
 			sessions = append(sessions, ExerciseSession{
 				ID:                exID,
-				StartTime:         ex.Interval.StartTime,
-				EndTime:           ex.Interval.EndTime,
+				StartTime:         startRaw,
+				EndTime:           endRaw,
 				ExerciseType:      exType,
 				DisplayName:       dispName,
 				DurationMinutes:   duration,
@@ -1360,6 +1375,7 @@ func (s *StatelessService) fetchExercises(client *http.Client, startStr, pageTok
 		}
 	}
 
+	fmt.Printf("[Stateless Fetch] Retrieved %d real exercise sessions from Google Health API\n", len(sessions))
 	return sessions, listResp.NextPageToken, nil
 }
 
@@ -1505,12 +1521,15 @@ func (s *StatelessService) fetchVitalsAndBody(client *http.Client, startDateStr 
 					if dp.DailyOxygenSaturation != nil {
 						o := dp.DailyOxygenSaturation
 						d := o.Date.String()
-						if d >= startDateStr && o.AveragePercentage > 0 {
+						avgPct := parseAnyFloat(o.AveragePercentage)
+						minPct := parseAnyFloat(o.LowerBoundPercentage)
+						maxPct := parseAnyFloat(o.UpperBoundPercentage)
+						if d >= startDateStr && avgPct > 0 {
 							spo2s = append(spo2s, SpO2Record{
 								Date:       d,
-								AvgPercent: math.Round(o.AveragePercentage*10) / 10,
-								MinPercent: math.Round(o.LowerBoundPercentage*10) / 10,
-								MaxPercent: math.Round(o.UpperBoundPercentage*10) / 10,
+								AvgPercent: math.Round(avgPct*10) / 10,
+								MinPercent: math.Round(minPct*10) / 10,
+								MaxPercent: math.Round(maxPct*10) / 10,
 							})
 						}
 					}
@@ -1530,9 +1549,9 @@ func (s *StatelessService) fetchVitalsAndBody(client *http.Client, startDateStr 
 					if dp.DailyRespiratoryRate != nil {
 						rr := dp.DailyRespiratoryRate
 						d := rr.Date.String()
-						val := rr.RateBpm
+						val := parseAnyFloat(rr.RateBpm)
 						if val == 0 {
-							val = rr.BreathsPerMinute
+							val = parseAnyFloat(rr.BreathsPerMinute)
 						}
 						if d >= startDateStr && val > 0 {
 							resps = append(resps, RespiratoryRateRecord{
@@ -1557,15 +1576,17 @@ func (s *StatelessService) fetchVitalsAndBody(client *http.Client, startDateStr 
 					if dp.DailySleepTemperatureDerivations != nil {
 						st := dp.DailySleepTemperatureDerivations
 						d := st.Date.String()
-						if d >= startDateStr && st.NightlyTemperatureCelsius > 0 {
-							base := st.NightlyTemperatureCelsius
-							if st.BaselineTemperatureCelsius != nil && *st.BaselineTemperatureCelsius > 0 {
-								base = *st.BaselineTemperatureCelsius
+						nightlyC := parseAnyFloat(st.NightlyTemperatureCelsius)
+						baseC := parseAnyFloat(st.BaselineTemperatureCelsius)
+						if d >= startDateStr && nightlyC > 0 {
+							base := nightlyC
+							if baseC > 0 {
+								base = baseC
 							}
-							delta := math.Round((st.NightlyTemperatureCelsius-base)*100) / 100
+							delta := math.Round((nightlyC-base)*100) / 100
 							temps = append(temps, SleepTempRecord{
 								Date:         d,
-								NightlyTempC: math.Round(st.NightlyTemperatureCelsius*100) / 100,
+								NightlyTempC: math.Round(nightlyC*100) / 100,
 								BaselineC:    math.Round(base*100) / 100,
 								DeltaC:       delta,
 							})
@@ -1587,15 +1608,18 @@ func (s *StatelessService) fetchVitalsAndBody(client *http.Client, startDateStr 
 			var listResp ListDataPointsResponse
 			if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
 				for _, dp := range listResp.DataPoints {
-					if dp.Weight != nil && dp.Weight.WeightGrams > 0 {
-						var d string
-						if dp.Weight.SampleTime.CivilTime != nil {
-							d = dp.Weight.SampleTime.CivilTime.Date.String()
-						} else if t, err := time.Parse(time.RFC3339, dp.Weight.SampleTime.PhysicalTime); err == nil {
-							d = t.Format("2006-01-02")
-						}
-						if d >= startDateStr {
-							weightMap[d] = math.Round((dp.Weight.WeightGrams/1000.0)*10) / 10
+					if dp.Weight != nil {
+						wg := parseAnyFloat(dp.Weight.WeightGrams)
+						if wg > 0 {
+							var d string
+							if dp.Weight.SampleTime.CivilTime != nil {
+								d = dp.Weight.SampleTime.CivilTime.Date.String()
+							} else if t, err := time.Parse(time.RFC3339, dp.Weight.SampleTime.PhysicalTime); err == nil {
+								d = t.Format("2006-01-02")
+							}
+							if d >= startDateStr {
+								weightMap[d] = math.Round((wg/1000.0)*10) / 10
+							}
 						}
 					}
 				}
@@ -1610,15 +1634,18 @@ func (s *StatelessService) fetchVitalsAndBody(client *http.Client, startDateStr 
 			var listResp ListDataPointsResponse
 			if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
 				for _, dp := range listResp.DataPoints {
-					if dp.BodyFat != nil && dp.BodyFat.Percentage > 0 {
-						var d string
-						if dp.BodyFat.SampleTime.CivilTime != nil {
-							d = dp.BodyFat.SampleTime.CivilTime.Date.String()
-						} else if t, err := time.Parse(time.RFC3339, dp.BodyFat.SampleTime.PhysicalTime); err == nil {
-							d = t.Format("2006-01-02")
-						}
-						if d >= startDateStr {
-							fatMap[d] = math.Round(dp.BodyFat.Percentage*10) / 10
+					if dp.BodyFat != nil {
+						pct := parseAnyFloat(dp.BodyFat.Percentage)
+						if pct > 0 {
+							var d string
+							if dp.BodyFat.SampleTime.CivilTime != nil {
+								d = dp.BodyFat.SampleTime.CivilTime.Date.String()
+							} else if t, err := time.Parse(time.RFC3339, dp.BodyFat.SampleTime.PhysicalTime); err == nil {
+								d = t.Format("2006-01-02")
+							}
+							if d >= startDateStr {
+								fatMap[d] = math.Round(pct*10) / 10
+							}
 						}
 					}
 				}
@@ -1676,7 +1703,7 @@ func (s *StatelessService) fetchNutrition(client *http.Client, startDateStr stri
 							d = t.Format("2006-01-02")
 						}
 						if d >= startDateStr {
-							getRec(d).HydrationMl += int(dp.HydrationLog.AmountConsumed.Milliliters)
+							getRec(d).HydrationMl += parseAnyInt(dp.HydrationLog.AmountConsumed.Milliliters)
 						}
 					}
 				}
@@ -1704,17 +1731,17 @@ func (s *StatelessService) fetchNutrition(client *http.Client, startDateStr stri
 							rec := getRec(d)
 							rec.MealsLogged++
 							if nl.Energy != nil {
-								rec.CaloriesIn += int(nl.Energy.Kcal)
+								rec.CaloriesIn += parseAnyInt(nl.Energy.Kcal)
 							}
 							if nl.TotalCarbohydrate != nil {
-								rec.CarbsG = math.Round((rec.CarbsG+nl.TotalCarbohydrate.Grams)*10) / 10
+								rec.CarbsG = math.Round((rec.CarbsG+parseAnyFloat(nl.TotalCarbohydrate.Grams))*10) / 10
 							}
 							if nl.TotalFat != nil {
-								rec.FatG = math.Round((rec.FatG+nl.TotalFat.Grams)*10) / 10
+								rec.FatG = math.Round((rec.FatG+parseAnyFloat(nl.TotalFat.Grams))*10) / 10
 							}
 							for _, nut := range nl.Nutrients {
 								if strings.Contains(strings.ToUpper(nut.Nutrient), "PROTEIN") {
-									rec.ProteinG = math.Round((rec.ProteinG+nut.Quantity.Grams)*10) / 10
+									rec.ProteinG = math.Round((rec.ProteinG+parseAnyFloat(nut.Quantity.Grams))*10) / 10
 								}
 							}
 						}
