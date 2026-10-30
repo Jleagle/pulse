@@ -189,7 +189,13 @@ func (s *Server) handleAuthURL(w http.ResponseWriter, r *http.Request) {
 		config.Scopes = scopes
 	}
 
-	authURL := config.AuthCodeURL("state-token",
+	state, err := SetOAuthStateCookie(w)
+	if err != nil {
+		http.Error(w, "Failed to generate OAuth state token", http.StatusInternalServerError)
+		return
+	}
+
+	authURL := config.AuthCodeURL(state,
 		oauth2.AccessTypeOffline,
 		oauth2.ApprovalForce,
 		oauth2.SetAuthURLParam("include_granted_scopes", "true"),
@@ -199,6 +205,11 @@ func (s *Server) handleAuthURL(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
+	if !ValidateOAuthStateCookie(w, r) {
+		http.Redirect(w, r, "/?error=invalid_oauth_state", http.StatusFound)
+		return
+	}
+
 	code := r.URL.Query().Get("code")
 	if code == "" {
 		http.Redirect(w, r, "/?error=no_code", http.StatusFound)

@@ -19,8 +19,9 @@ import (
 
 // Session Cookie Configuration
 const (
-	SessionCookieName = "pulse_session"
-	CookieMaxAge      = 30 * 24 * 60 * 60 // 30 days in seconds
+	SessionCookieName    = "pulse_session"
+	OAuthStateCookieName = "pulse_oauth_state"
+	CookieMaxAge         = 30 * 24 * 60 * 60 // 30 days in seconds
 )
 
 // Sleep Session Data Access
@@ -330,4 +331,39 @@ func ClearSessionCookie(w http.ResponseWriter) {
 		SameSite: http.SameSiteLaxMode,
 	}
 	http.SetCookie(w, cookie)
+}
+
+func SetOAuthStateCookie(w http.ResponseWriter) (string, error) {
+	b := make([]byte, 16)
+	if _, err := io.ReadFull(rand.Reader, b); err != nil {
+		return "", err
+	}
+	state := base64.RawURLEncoding.EncodeToString(b)
+	http.SetCookie(w, &http.Cookie{
+		Name:     OAuthStateCookieName,
+		Value:    state,
+		Path:     "/",
+		MaxAge:   600, // 10 minutes
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+	return state, nil
+}
+
+func ValidateOAuthStateCookie(w http.ResponseWriter, r *http.Request) bool {
+	stateParam := r.URL.Query().Get("state")
+	cookie, err := r.Cookie(OAuthStateCookieName)
+	http.SetCookie(w, &http.Cookie{
+		Name:     OAuthStateCookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		Expires:  time.Unix(0, 0),
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+	if err != nil || cookie.Value == "" || stateParam == "" {
+		return false
+	}
+	return cookie.Value == stateParam
 }
