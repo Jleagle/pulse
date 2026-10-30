@@ -42,9 +42,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/logout", s.handleLogout)
 	mux.HandleFunc("GET /api/logout", s.handleLogout)
 	mux.HandleFunc("GET /api/stats", s.handleStats)
+	mux.HandleFunc("GET /api/exercise-route", s.handleExerciseRoute)
 	mux.HandleFunc("POST /api/security-events", s.handleSecurityEvents)
-	mux.HandleFunc("POST /api/config", s.handleUpdateConfig)
-	mux.HandleFunc("GET /api/config", s.handleGetConfig)
 
 	// Frontend static assets
 	subFS, err := fs.Sub(webAssets, "web")
@@ -53,7 +52,7 @@ func (s *Server) Routes() http.Handler {
 	}
 
 	// SPA tab routing so page refreshes and links work cleanly
-	for _, tab := range []string{"overview", "sleep", "heart", "activity", "settings", "setup-guide", "privacy-policy", "terms-of-service"} {
+	for _, tab := range []string{"overview", "sleep", "heart", "activity", "workouts", "vitals", "nutrition", "settings", "setup-guide", "privacy-policy", "terms-of-service"} {
 		tabName := tab
 		mux.HandleFunc("GET /"+tabName, func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
@@ -146,49 +145,6 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
-	cID, _, rURI := s.service.GetCredentials()
-	if rURI == "" {
-		rURI = s.effectiveRedirectURI(r)
-	}
-	masked := ""
-	if len(cID) > 12 {
-		masked = cID[:8] + "..." + cID[len(cID)-8:]
-	} else if len(cID) > 0 {
-		masked = "********"
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"client_id_masked": masked,
-		"redirect_uri":     rURI,
-		"configured":       strconv.FormatBool(cID != ""),
-	})
-}
-
-func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
-	var req ConfigRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
-		return
-	}
-	if strings.TrimSpace(req.ClientID) == "" || strings.TrimSpace(req.ClientSecret) == "" {
-		http.Error(w, "Both Client ID and Client Secret are required", http.StatusBadRequest)
-		return
-	}
-	err := s.service.SetCredentials(req.ClientID, req.ClientSecret, req.RedirectURI)
-	if err != nil {
-		http.Error(w, "Failed to save configuration: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	log.Printf("[INFO] Self-Hosted OAuth Client credentials updated via Web UI")
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(ConfigResponse{
-		Status:      "ok",
-		Message:     "Credentials saved and activated successfully!",
-		RedirectURI: s.effectiveRedirectURI(r),
-	})
-}
-
 func (s *Server) handleAuthURL(w http.ResponseWriter, r *http.Request) {
 	cID, cSec, _ := s.service.GetCredentials()
 	if cID == "" || cSec == "" {
@@ -199,20 +155,28 @@ func (s *Server) handleAuthURL(w http.ResponseWriter, r *http.Request) {
 	config := s.service.GetOAuthConfig(s.effectiveRedirectURI(r))
 	reqScope := r.URL.Query().Get("scope")
 	if reqScope != "" {
-		scopeURI := reqScope
-		switch reqScope {
-		case "sleep":
-			scopeURI = "https://www.googleapis.com/auth/googlehealth.sleep.readonly"
-		case "heart":
-			scopeURI = "https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly"
-		case "activity":
-			scopeURI = "https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly"
-		}
-		config.Scopes = []string{
-			scopeURI,
+		scopes := []string{
 			"https://www.googleapis.com/auth/userinfo.email",
 			"https://www.googleapis.com/auth/userinfo.profile",
 		}
+		switch reqScope {
+		case "sleep":
+			scopes = append(scopes, "https://www.googleapis.com/auth/googlehealth.sleep.readonly")
+		case "heart", "vitals":
+			scopes = append(scopes, "https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly")
+		case "activity":
+			scopes = append(scopes, "https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly")
+		case "workouts", "location":
+			scopes = append(scopes,
+				"https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly",
+				"https://www.googleapis.com/auth/googlehealth.location.readonly",
+			)
+		case "nutrition":
+			scopes = append(scopes, "https://www.googleapis.com/auth/googlehealth.nutrition.readonly")
+		default:
+			scopes = append(scopes, reqScope)
+		}
+		config.Scopes = scopes
 	}
 
 	authURL := config.AuthCodeURL("state-token",
@@ -310,6 +274,49 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
+}
+
+func (s *Server) handleExerciseRoute(w http.ResponseWriter, r *http.Request) {
+	exerciseID := r.URL.Query().Get("id")
+	if exerciseID == "" {
+		http.Error(w, "Missing exercise id", http.StatusBadRequest)
+		return
+	}
+
+	if strings.HasPrefix(exerciseID, "sample-ex-") {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(GenerateSampleExerciseRoute(exerciseID))
+		return
+	}
+
+	token, err := GetSessionCookie(r)
+	if err != nil || token == nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(GenerateSampleExerciseRoute(exerciseID))
+		return
+	}
+
+	client, err := s.service.GetOAuthClient(r.Context(), token, w)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(GenerateSampleExerciseRoute(exerciseID))
+		return
+	}
+
+	routeResp, err := s.service.FetchExerciseRoute(client, exerciseID)
+	if err != nil {
+		log.Printf("[WARNING] FetchExerciseRoute failed for %s: %v", exerciseID, err)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(&ExerciseRouteResponse{
+			ExerciseID: exerciseID,
+			HasRoute:   false,
+			Points:     []RoutePoint{},
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(routeResp)
 }
 
 // handleSecurityEvents implements Google Cross-Account Protection (RISC - RFC 8915) Security Event Token receiver

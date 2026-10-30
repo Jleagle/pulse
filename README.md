@@ -18,7 +18,7 @@ By running **Pulse** as a **self-hosted instance with your own OAuth Client cred
 ## ✨ Features
 
 * **⚡ 100% Stateless Backend:** Pulse operates without database servers, persistent storage volumes, or data lakes. When you view your dashboard, data is fetched live from Google Health API and formatted directly in volatile system memory. Once the HTTP request finishes, server buffers are wiped.
-* **🎛️ Interactive Web UI Setup:** Don't want to mess with environment variables? Open Pulse in your browser, head to the **Settings** or **Self-Host Guide** tab, paste your Client ID and Secret directly into the UI, and activate your instance on the fly!
+* **🔑 Environment Variable Setup:** Configure your Google OAuth `CLIENT_ID` and `CLIENT_SECRET` via environment variables or a `.env` file—no configuration files or secrets are ever written to disk by the app.
 * **🔗 Dynamic Redirect URI Detection:** Whether you access Pulse via `http://localhost:8080`, your home network (`http://192.168.1.50:8080`), or a secure reverse-proxy domain (`https://pulse.my-home.local`), Pulse dynamically detects and displays the exact OAuth Callback URI you need.
 * **📊 Comprehensive Health Analytics:**
   * **Sleep Stages & Duration:** Deep, REM, light, and awake stage breakdowns.
@@ -37,24 +37,29 @@ By running **Pulse** as a **self-hosted instance with your own OAuth Client cred
    cd pulse
    ```
 
-2. Start the container:
+2. Copy `.env.example` to `.env` and add your `CLIENT_ID` and `CLIENT_SECRET`:
+   ```bash
+   cp .env.example .env
+   ```
+
+3. Start the container:
    ```bash
    docker compose up -d
    ```
 
-3. Open your browser to **http://localhost:8080** and follow the **2-Minute Setup Guide** in the UI to enter your free Google OAuth keys!
-
-*(Optional: You can also copy `.env.example` to `.env` and pre-configure `CLIENT_ID` and `CLIENT_SECRET` before starting.)*
+4. Open your browser to **http://localhost:8080** and connect your Google Health account!
 
 ---
 
 ### Option B: Run from Source (Go 1.22+)
 
-1. Build and run directly:
+1. Export your credentials and run directly:
    ```bash
+   export CLIENT_ID="your-client-id.apps.googleusercontent.com"
+   export CLIENT_SECRET="your-client-secret"
    go run .
    ```
-2. Visit **http://localhost:8080** to configure your credentials and link your account.
+2. Visit **http://localhost:8080** to link your account.
 
 ---
 
@@ -85,8 +90,8 @@ Follow these exact steps inside your Google Cloud Console to create keys that ne
      ```
    * Click **Create** and copy your **Client ID** (`*.apps.googleusercontent.com`) and **Client Secret** (`GOCSPX-...`).
 
-5. **Activate Your Pulse Instance:**
-   * Paste the copied credentials into Pulse's **Settings Tab** (`http://localhost:8080/settings`) and click **Save & Activate Instance**. You are ready to go!
+5. **Configure Your Pulse Instance:**
+   * Set `CLIENT_ID` and `CLIENT_SECRET` in your `.env` file or environment variables, start Pulse, and connect your account in the **Settings Tab** (`http://localhost:8080/settings`). You are ready to go!
 
 ---
 

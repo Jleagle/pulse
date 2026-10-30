@@ -11,9 +11,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Leaflet.js for Interactive GPS Route Maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link rel="stylesheet" href="index.css?v=20260706_live3">
+    <link rel="stylesheet" href="index.css?v=20261030_full">
 
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-G0EJBH8BE0"></script>
@@ -41,17 +44,29 @@
                     <i data-lucide="layout-dashboard"></i>
                     <span>Overview</span>
                 </button>
+                <button id="nav-btn-workouts" class="nav-item" onclick="switchTab('workouts')">
+                    <i data-lucide="map"></i>
+                    <span>Workouts & Maps</span>
+                </button>
                 <button id="nav-btn-sleep" class="nav-item" onclick="switchTab('sleep')">
                     <i data-lucide="moon"></i>
                     <span>Sleep Analysis</span>
                 </button>
                 <button id="nav-btn-heart" class="nav-item" onclick="switchTab('heart')">
                     <i data-lucide="heart"></i>
-                    <span>Heart Health</span>
+                    <span>Heart & Cardio</span>
                 </button>
                 <button id="nav-btn-activity" class="nav-item" onclick="switchTab('activity')">
                     <i data-lucide="footprints"></i>
                     <span>Activity & Energy</span>
+                </button>
+                <button id="nav-btn-vitals" class="nav-item" onclick="switchTab('vitals')">
+                    <i data-lucide="thermometer"></i>
+                    <span>Vitals & Body</span>
+                </button>
+                <button id="nav-btn-nutrition" class="nav-item" onclick="switchTab('nutrition')">
+                    <i data-lucide="droplets"></i>
+                    <span>Nutrition & Water</span>
                 </button>
                 <button id="nav-btn-settings" class="nav-item" onclick="switchTab('settings')">
                     <i data-lucide="settings"></i>
@@ -270,11 +285,35 @@
                             <canvas id="chart-rhr"></canvas>
                         </div>
                     </div>
+
+                    <div class="chart-panel glass-panel">
+                        <div class="chart-header">
+                            <div>
+                                <h3>Daily Heart Rate Zones</h3>
+                                <p class="chart-subtitle">Minutes in Light, Moderate (Fat Burn), Vigorous (Cardio), and Peak zones</p>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="chart-hr-zones"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-panel glass-panel">
+                        <div class="chart-header">
+                            <div>
+                                <h3>VO2 Max (Cardio Fitness Score)</h3>
+                                <p class="chart-subtitle">Aerobic endurance capacity (mL/kg/min)</p>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="chart-vo2-max"></canvas>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="table-panel glass-panel">
                     <div class="table-header">
-                        <h3>Heart Vitals History</h3>
+                        <h3>Heart & Cardio History</h3>
                     </div>
                     <div class="table-responsive">
                         <table class="data-table" id="heart-history-table">
@@ -284,11 +323,13 @@
                                     <th>Resting Heart Rate (RHR)</th>
                                     <th>Avg HRV</th>
                                     <th>Deep Sleep RMSSD</th>
+                                    <th>VO2 Max</th>
+                                    <th>Cardio / Peak Zones</th>
                                     <th>Status</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>
+                                <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -313,12 +354,36 @@
                     <div class="chart-panel glass-panel">
                         <div class="chart-header">
                             <div>
-                                <h3>Active Energy & Minutes</h3>
-                                <p class="chart-subtitle">Calories burned (kcal) and active duration</p>
+                                <h3>Active vs Basal Energy (TDEE)</h3>
+                                <p class="chart-subtitle">Active calories burned vs resting basal expenditure (kcal)</p>
                             </div>
                         </div>
                         <div class="chart-container">
                             <canvas id="chart-calories"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-panel glass-panel">
+                        <div class="chart-header">
+                            <div>
+                                <h3>Daily Distance Covered</h3>
+                                <p class="chart-subtitle">Total kilometers walked, run, or cycled per day</p>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="chart-distance"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-panel glass-panel">
+                        <div class="chart-header">
+                            <div>
+                                <h3>Floors Climbed & Active Minutes</h3>
+                                <p class="chart-subtitle">Daily elevation gain (floors) and active zone duration</p>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="chart-floors"></canvas>
                         </div>
                     </div>
                 </div>
@@ -333,13 +398,344 @@
                                 <tr>
                                     <th>Date</th>
                                     <th>Steps</th>
-                                    <th>Active Calories</th>
+                                    <th>Distance</th>
+                                    <th>Floors</th>
+                                    <th>Active / Total kcal</th>
                                     <th>Active Minutes</th>
                                     <th>Goal Achieved</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>
+                                <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: WORKOUTS & RUN MAPS -->
+            <section id="tab-workouts" class="tab-pane">
+                <div class="stats-grid mb-6">
+                    <div class="stat-card glass-panel card-emerald">
+                        <div class="card-header">
+                            <span class="card-label">Workouts Logged</span>
+                            <i data-lucide="dumbbell" class="icon-emerald"></i>
+                        </div>
+                        <div class="card-value" id="workouts-total-count">--</div>
+                        <div class="card-footer">
+                            <span id="workouts-latest-name">Recent exercise sessions</span>
+                        </div>
+                    </div>
+                    <div class="stat-card glass-panel card-purple">
+                        <div class="card-header">
+                            <span class="card-label">Total Workout Distance</span>
+                            <i data-lucide="route" class="icon-purple"></i>
+                        </div>
+                        <div class="card-value" id="workouts-total-dist">-- <span class="unit">km</span></div>
+                        <div class="card-footer">
+                            <span id="workouts-avg-pace">GPS & tracked sessions</span>
+                        </div>
+                    </div>
+                    <div class="stat-card glass-panel card-rose">
+                        <div class="card-header">
+                            <span class="card-label">Avg Workout Heart Rate</span>
+                            <i data-lucide="heart-pulse" class="icon-rose"></i>
+                        </div>
+                        <div class="card-value" id="workouts-avg-hr">-- <span class="unit">BPM</span></div>
+                        <div class="card-footer">
+                            <span id="workouts-total-azm">-- Active Zone Mins</span>
+                        </div>
+                    </div>
+                    <div class="stat-card glass-panel card-blue">
+                        <div class="card-header">
+                            <span class="card-label">Workout Energy Burned</span>
+                            <i data-lucide="flame" class="icon-blue"></i>
+                        </div>
+                        <div class="card-value" id="workouts-total-cals">-- <span class="unit">kcal</span></div>
+                        <div class="card-footer">
+                            <span id="workouts-total-mins">-- total active minutes</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Interactive Strava-Style GPS Map & Telemetry Split View -->
+                <div class="dashboard-charts-grid mb-6">
+                    <div class="chart-panel glass-panel" style="display: flex; flex-direction: column;">
+                        <div class="chart-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                            <div>
+                                <h3 id="map-workout-title">GPS Route Map</h3>
+                                <p class="chart-subtitle" id="map-workout-subtitle">Select any outdoor run, walk, ride, or hike below to inspect its GPS TCX track</p>
+                            </div>
+                            <span class="badge badge-emerald" id="map-gps-badge" style="padding: 4px 10px; border-radius: 16px; font-size: 0.78rem; background: rgba(52, 211, 153, 0.15); color: var(--color-emerald);">TCX Route Active</span>
+                        </div>
+                        <div id="workout-route-map" style="height: 360px; width: 100%; border-radius: 14px; overflow: hidden; border: 1px solid var(--border-color); background: #0f172a; position: relative; z-index: 1;"></div>
+                    </div>
+
+                    <div class="chart-panel glass-panel" style="display: flex; flex-direction: column; justify-content: space-between;">
+                        <div>
+                            <div class="chart-header">
+                                <div>
+                                    <h3>Elevation, Heart Rate & Pace Telemetry</h3>
+                                    <p class="chart-subtitle" id="profile-workout-subtitle">Continuous altitude (m) & heart rate (BPM) along the route</p>
+                                </div>
+                            </div>
+                            <div class="chart-container" style="height: 250px;">
+                                <canvas id="chart-workout-profile"></canvas>
+                            </div>
+                        </div>
+
+                        <div id="workout-zones-bar-container" style="margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border-color);">
+                            <div style="display: flex; justify-content: space-between; font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 8px;">
+                                <span><strong>Workout Heart Rate Zone Breakdown</strong></span>
+                                <span id="workout-zones-summary">Light / Moderate / Vigorous / Peak</span>
+                            </div>
+                            <div id="workout-zones-bar" style="display: flex; height: 10px; border-radius: 6px; overflow: hidden; background: rgba(255,255,255,0.06);">
+                                <div style="width: 25%; background: #38bdf8;" title="Light"></div>
+                                <div style="width: 35%; background: #34d399;" title="Moderate"></div>
+                                <div style="width: 30%; background: #f59e0b;" title="Vigorous"></div>
+                                <div style="width: 10%; background: #f43f5e;" title="Peak"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-panel glass-panel">
+                    <div class="table-header">
+                        <h3>Exercise & Workout Sessions</h3>
+                        <span class="badge">Click any row to load GPS Route & Telemetry</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table" id="workouts-history-table">
+                            <thead>
+                                <tr>
+                                    <th>Date & Time</th>
+                                    <th>Workout</th>
+                                    <th>Duration</th>
+                                    <th>Distance</th>
+                                    <th>Avg Pace</th>
+                                    <th>Avg HR</th>
+                                    <th>Calories</th>
+                                    <th>HR Zones</th>
+                                    <th>Route Map</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="9" style="text-align: center; color: var(--text-muted);">No workout sessions loaded.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: VITALS & BODY -->
+            <section id="tab-vitals" class="tab-pane">
+                <div class="stats-grid mb-6">
+                    <div class="stat-card glass-panel card-blue">
+                        <div class="card-header">
+                            <span class="card-label">Blood Oxygen (SpO2)</span>
+                            <i data-lucide="wind" class="icon-blue"></i>
+                        </div>
+                        <div class="card-value" id="vitals-spo2-val">--%</div>
+                        <div class="card-footer">
+                            <span id="vitals-spo2-sub">Nightly average saturation</span>
+                        </div>
+                    </div>
+                    <div class="stat-card glass-panel card-emerald">
+                        <div class="card-header">
+                            <span class="card-label">Respiratory Rate</span>
+                            <i data-lucide="activity" class="icon-emerald"></i>
+                        </div>
+                        <div class="card-value" id="vitals-resp-val">-- <span class="unit">brpm</span></div>
+                        <div class="card-footer">
+                            <span id="vitals-resp-sub">Breaths per minute during sleep</span>
+                        </div>
+                    </div>
+                    <div class="stat-card glass-panel card-rose">
+                        <div class="card-header">
+                            <span class="card-label">Skin Temperature</span>
+                            <i data-lucide="thermometer" class="icon-rose"></i>
+                        </div>
+                        <div class="card-value" id="vitals-temp-val">--°C</div>
+                        <div class="card-footer">
+                            <span id="vitals-temp-sub">Nightly variation from baseline</span>
+                        </div>
+                    </div>
+                    <div class="stat-card glass-panel card-purple">
+                        <div class="card-header">
+                            <span class="card-label">Body Weight & Fat</span>
+                            <i data-lucide="scale" class="icon-purple"></i>
+                        </div>
+                        <div class="card-value" id="vitals-weight-val">-- <span class="unit">kg</span></div>
+                        <div class="card-footer">
+                            <span id="vitals-weight-sub">Body composition trend</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-charts-grid mb-6">
+                    <div class="chart-panel glass-panel">
+                        <div class="chart-header">
+                            <div>
+                                <h3>Blood Oxygen Saturation (SpO2 %)</h3>
+                                <p class="chart-subtitle">Nightly average, lower bound, and upper bound %</p>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="chart-spo2"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-panel glass-panel">
+                        <div class="chart-header">
+                            <div>
+                                <h3>Nightly Respiratory Rate</h3>
+                                <p class="chart-subtitle">Average breaths per minute during sleep</p>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="chart-respiratory"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-panel glass-panel">
+                        <div class="chart-header">
+                            <div>
+                                <h3>Sleep Skin Temperature Variation</h3>
+                                <p class="chart-subtitle">Nightly deviation (°C) relative to 30-day personal baseline</p>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="chart-skin-temp"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-panel glass-panel">
+                        <div class="chart-header">
+                            <div>
+                                <h3>Body Weight & Body Fat %</h3>
+                                <p class="chart-subtitle">Weight (kg) and body fat percentage over time</p>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="chart-body-comp"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-panel glass-panel">
+                    <div class="table-header">
+                        <h3>Daily Vitals & Body Composition Log</h3>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table" id="vitals-history-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>SpO2 (Avg / Range)</th>
+                                    <th>Respiratory Rate</th>
+                                    <th>Skin Temp (Δ Baseline)</th>
+                                    <th>Weight</th>
+                                    <th>Body Fat</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: NUTRITION & HYDRATION -->
+            <section id="tab-nutrition" class="tab-pane">
+                <div class="stats-grid mb-6">
+                    <div class="stat-card glass-panel card-blue">
+                        <div class="card-header">
+                            <span class="card-label">Daily Hydration</span>
+                            <i data-lucide="droplets" class="icon-blue"></i>
+                        </div>
+                        <div class="card-value" id="nut-water-val">-- <span class="unit">ml</span></div>
+                        <div class="card-footer">
+                            <span id="nut-water-sub">Daily fluid intake vs 2,500 ml goal</span>
+                        </div>
+                    </div>
+                    <div class="stat-card glass-panel card-rose">
+                        <div class="card-header">
+                            <span class="card-label">Calories Consumed</span>
+                            <i data-lucide="flame" class="icon-rose"></i>
+                        </div>
+                        <div class="card-value" id="nut-cals-val">-- <span class="unit">kcal</span></div>
+                        <div class="card-footer">
+                            <span id="nut-cals-sub">Logged dietary energy intake</span>
+                        </div>
+                    </div>
+                    <div class="stat-card glass-panel card-emerald">
+                        <div class="card-header">
+                            <span class="card-label">Protein Intake</span>
+                            <i data-lucide="beef" class="icon-emerald"></i>
+                        </div>
+                        <div class="card-value" id="nut-protein-val">-- <span class="unit">g</span></div>
+                        <div class="card-footer">
+                            <span id="nut-protein-sub">Daily protein macronutrient</span>
+                        </div>
+                    </div>
+                    <div class="stat-card glass-panel card-purple">
+                        <div class="card-header">
+                            <span class="card-label">Carbs & Fat</span>
+                            <i data-lucide="pie-chart" class="icon-purple"></i>
+                        </div>
+                        <div class="card-value" id="nut-macros-val">--g / --g</div>
+                        <div class="card-footer">
+                            <span id="nut-macros-sub">Carbohydrates / Total Fat</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-charts-grid mb-6">
+                    <div class="chart-panel glass-panel">
+                        <div class="chart-header">
+                            <div>
+                                <h3>Daily Water & Fluid Intake (ml)</h3>
+                                <p class="chart-subtitle">Milliliters consumed per day</p>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="chart-hydration"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-panel glass-panel">
+                        <div class="chart-header">
+                            <div>
+                                <h3>Macronutrient Breakdown (g)</h3>
+                                <p class="chart-subtitle">Daily Protein, Carbohydrates, and Fat intake</p>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="chart-macros"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-panel glass-panel">
+                    <div class="table-header">
+                        <h3>Nutrition & Hydration Log</h3>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table" id="nutrition-history-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Water Intake</th>
+                                    <th>Calories In</th>
+                                    <th>Protein</th>
+                                    <th>Carbs</th>
+                                    <th>Fat</th>
+                                    <th>Meals Logged</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -401,43 +797,17 @@
                             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
                                 <div>
                                     <h4 style="margin: 0;">Self-Hosted OAuth Configuration</h4>
-                                    <p class="panel-subtitle" style="margin: 4px 0 0;">Bring Your Own Keys (BYOK) to bypass the $500/year CASA audit fee.</p>
+                                    <p class="panel-subtitle" style="margin: 4px 0 0;">Configured via <code>CLIENT_ID</code> and <code>CLIENT_SECRET</code> environment variables.</p>
                                 </div>
                                 <span id="oauth-config-status" style="font-size: 0.85rem; font-weight: 600; padding: 4px 12px; border-radius: 20px; background: rgba(255,255,255,0.05);">Checking...</span>
                             </div>
 
-                            <div style="background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.2); border-radius: 12px; padding: 14px; display: flex; gap: 12px; align-items: flex-start; margin-bottom: 18px;">
+                            <div style="background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.2); border-radius: 12px; padding: 14px; display: flex; gap: 12px; align-items: flex-start;">
                                 <i data-lucide="info" class="icon-purple" style="flex-shrink: 0; margin-top: 2px;"></i>
                                 <div style="font-size: 0.86rem; color: var(--text-secondary); line-height: 1.6;">
                                     <strong>Why Self-Host?</strong> By creating a free Google Cloud project in <em>Testing status</em>, up to 100 users/family members can connect their Google Health / Fitbit accounts completely for free with zero security audit requirements. <a href="#" onclick="event.preventDefault(); switchTab('setup-guide');" style="color: var(--color-purple); font-weight: 600; text-decoration: underline;">Read 2-Minute Setup Guide →</a>
                                 </div>
                             </div>
-
-                            <form id="config-form" onsubmit="saveServerConfig(event)" style="display: flex; flex-direction: column; gap: 16px;">
-                                <div style="display: flex; flex-direction: column; gap: 6px;">
-                                    <label for="config-client-id" style="font-size: 0.88rem; font-weight: 600; color: var(--text-primary);">Google Client ID</label>
-                                    <input type="text" id="config-client-id" placeholder="e.g. 123456789-abc.apps.googleusercontent.com" required style="padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.3); color: var(--text-primary); font-family: monospace; font-size: 0.88rem;">
-                                </div>
-
-                                <div style="display: flex; flex-direction: column; gap: 6px;">
-                                    <label for="config-client-secret" style="font-size: 0.88rem; font-weight: 600; color: var(--text-primary);">Google Client Secret</label>
-                                    <input type="password" id="config-client-secret" placeholder="GOCSPX-..." required style="padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.3); color: var(--text-primary); font-family: monospace; font-size: 0.88rem;">
-                                </div>
-
-                                <div style="display: flex; flex-direction: column; gap: 6px;">
-                                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                                        <label for="config-redirect-uri" style="font-size: 0.88rem; font-weight: 600; color: var(--text-primary);">Authorized Redirect URI <span style="font-weight: 400; color: var(--text-muted);">(Copy exact URI to Google Console)</span></label>
-                                        <button type="button" onclick="copyRedirectURI()" style="background: none; border: none; color: var(--color-purple); cursor: pointer; font-size: 0.82rem; font-weight: 600; display: flex; align-items: center; gap: 4px;"><i data-lucide="copy" style="width: 14px; height: 14px;"></i> Copy URI</button>
-                                    </div>
-                                    <input type="text" id="config-redirect-uri" readonly style="padding: 10px 14px; border-radius: 8px; border: 1px dashed var(--color-purple); background: rgba(139, 92, 246, 0.05); color: var(--text-primary); font-family: monospace; font-size: 0.88rem;">
-                                </div>
-
-                                <div style="display: flex; justify-content: flex-end; margin-top: 6px;">
-                                    <button type="submit" class="btn btn-purple" id="btn-save-config" style="padding: 10px 20px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
-                                        <i data-lucide="save"></i> Save & Activate Instance
-                                    </button>
-                                </div>
-                            </form>
                         </div>
 
                         <div class="danger-zone-box">
@@ -555,9 +925,9 @@
                         <div class="setup-step-card" style="display: flex; gap: 18px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 16px; padding: 22px;">
                             <div class="step-num" style="width: 36px; height: 36px; border-radius: 50%; background: var(--color-purple); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0;">5</div>
                             <div style="display: flex; flex-direction: column; gap: 8px;">
-                                <h4 style="font-size: 1.15rem; color: var(--text-primary); margin: 0;">Activate Your Instance</h4>
+                                <h4 style="font-size: 1.15rem; color: var(--text-primary); margin: 0;">Configure Environment Variables</h4>
                                 <p style="color: var(--text-secondary); line-height: 1.6; margin: 0;">
-                                    Copy the generated <strong>Client ID</strong> and <strong>Client Secret</strong> from Google Cloud Console, open the <a href="#" onclick="event.preventDefault(); switchTab('settings');" style="color: var(--color-purple); font-weight: 600; text-decoration: underline;">Settings Tab</a>, paste them into the Self-Hosted Configuration panel, and click <strong>Save & Activate Instance</strong>!
+                                    Set the generated <strong>Client ID</strong> and <strong>Client Secret</strong> as <code>CLIENT_ID</code> and <code>CLIENT_SECRET</code> environment variables (e.g. in your <code>.env</code> file or <code>docker-compose.yml</code>), restart the Pulse server, and connect your Google Account in the <a href="#" onclick="event.preventDefault(); switchTab('settings');" style="color: var(--color-purple); font-weight: 600; text-decoration: underline;">Settings Tab</a>!
                                 </p>
                             </div>
                         </div>
@@ -565,7 +935,7 @@
 
                     <div style="display: flex; justify-content: center; padding-top: 10px;">
                         <button class="btn btn-purple" onclick="switchTab('settings')" style="padding: 14px 28px; font-size: 1rem; font-weight: 600;">
-                            <i data-lucide="settings"></i> Go to Settings & Configure Keys
+                            <i data-lucide="settings"></i> Go to Settings
                         </button>
                     </div>
                 </div>

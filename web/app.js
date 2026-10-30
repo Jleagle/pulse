@@ -19,14 +19,36 @@ let appData = {
     rhr_next_page_token: "",
     hrv_records: [],
     hrv_next_page_token: "",
+    hr_zone_records: [],
+    vo2_max_records: [],
     heart_loaded: false,
     heart_loading: false,
 
     activity_records: [],
     activity_next_page_token: "",
     activity_loaded: false,
-    activity_loading: false
+    activity_loading: false,
+
+    exercise_sessions: [],
+    exercise_next_page_token: "",
+    workouts_loaded: false,
+    workouts_loading: false,
+
+    spo2_records: [],
+    respiratory_records: [],
+    sleep_temp_records: [],
+    body_records: [],
+    vitals_loaded: false,
+    vitals_loading: false,
+
+    nutrition_records: [],
+    nutrition_loaded: false,
+    nutrition_loading: false
 };
+
+let workoutMap = null;
+let workoutRouteLayer = null;
+let selectedExerciseId = "";
 
 function resetAppData() {
     try { localStorage.removeItem("pulse_app_cache"); } catch (e) {}
@@ -40,19 +62,40 @@ function resetAppData() {
         rhr_next_page_token: "",
         hrv_records: [],
         hrv_next_page_token: "",
+        hr_zone_records: [],
+        vo2_max_records: [],
         heart_loaded: false,
         heart_loading: false,
         activity_records: [],
         activity_next_page_token: "",
         activity_loaded: false,
-        activity_loading: false
+        activity_loading: false,
+        exercise_sessions: [],
+        exercise_next_page_token: "",
+        workouts_loaded: false,
+        workouts_loading: false,
+        spo2_records: [],
+        respiratory_records: [],
+        sleep_temp_records: [],
+        body_records: [],
+        vitals_loaded: false,
+        vitals_loading: false,
+        nutrition_records: [],
+        nutrition_loaded: false,
+        nutrition_loading: false
     };
     const sleepTbody = document.querySelector("#sleep-history-table tbody");
     if (sleepTbody) sleepTbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
     const heartTbody = document.querySelector("#heart-history-table tbody");
-    if (heartTbody) heartTbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
+    if (heartTbody) heartTbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
     const actTbody = document.querySelector("#activity-history-table tbody");
-    if (actTbody) actTbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
+    if (actTbody) actTbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
+    const workTbody = document.querySelector("#workouts-history-table tbody");
+    if (workTbody) workTbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
+    const vitalsTbody = document.querySelector("#vitals-history-table tbody");
+    if (vitalsTbody) vitalsTbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
+    const nutTbody = document.querySelector("#nutrition-history-table tbody");
+    if (nutTbody) nutTbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
     const cards = ["overview-sleep-duration", "overview-rhr", "overview-hrv", "overview-steps"];
     cards.forEach(id => {
         const el = document.getElementById(id);
@@ -74,10 +117,22 @@ function saveCache() {
                 rhr_next_page_token: appData.rhr_next_page_token,
                 hrv_records: appData.hrv_records,
                 hrv_next_page_token: appData.hrv_next_page_token,
+                hr_zone_records: appData.hr_zone_records,
+                vo2_max_records: appData.vo2_max_records,
                 heart_loaded: appData.heart_loaded,
                 activity_records: appData.activity_records,
                 activity_next_page_token: appData.activity_next_page_token,
-                activity_loaded: appData.activity_loaded
+                activity_loaded: appData.activity_loaded,
+                exercise_sessions: appData.exercise_sessions,
+                exercise_next_page_token: appData.exercise_next_page_token,
+                workouts_loaded: appData.workouts_loaded,
+                spo2_records: appData.spo2_records,
+                respiratory_records: appData.respiratory_records,
+                sleep_temp_records: appData.sleep_temp_records,
+                body_records: appData.body_records,
+                vitals_loaded: appData.vitals_loaded,
+                nutrition_records: appData.nutrition_records,
+                nutrition_loaded: appData.nutrition_loaded
             }
         };
         localStorage.setItem("pulse_app_cache", JSON.stringify(cachePayload));
@@ -96,6 +151,9 @@ function loadCache() {
             appData.sleep_loading = false;
             appData.heart_loading = false;
             appData.activity_loading = false;
+            appData.workouts_loading = false;
+            appData.vitals_loading = false;
+            appData.nutrition_loading = false;
             return true;
         }
     } catch (e) {
@@ -107,10 +165,12 @@ function loadCache() {
 // Global chart references for disposal
 const activeCharts = {};
 
+const VALID_TABS = ["overview", "workouts", "sleep", "heart", "activity", "vitals", "nutrition", "settings", "setup-guide", "privacy-policy", "terms-of-service"];
+
 // Handle browser back/forward buttons
 window.addEventListener("popstate", () => {
     const pathTab = window.location.pathname.replace("/", "") || "overview";
-    const validTab = ["overview", "sleep", "heart", "activity", "settings", "privacy-policy", "terms-of-service"].includes(pathTab) ? pathTab : "overview";
+    const validTab = VALID_TABS.includes(pathTab) ? pathTab : "overview";
     switchTab(validTab, false);
 });
 
@@ -129,7 +189,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Determine target tab from URL path, query param, or hash
     const urlParams = new URLSearchParams(window.location.search);
     const pathTab = window.location.pathname.replace("/", "") || urlParams.get("tab") || window.location.hash.replace("#", "");
-    const initialTab = ["overview", "sleep", "heart", "activity", "settings", "privacy-policy", "terms-of-service"].includes(pathTab) ? pathTab : "overview";
+    const initialTab = VALID_TABS.includes(pathTab) ? pathTab : "overview";
 
     const justConnected = urlParams.get("connected") === "true";
     if (justConnected) {
@@ -173,9 +233,12 @@ function switchTab(tabId, updateUrl = true) {
 
     const titles = {
         overview: "Dashboard Overview",
+        workouts: "Workouts & GPS Route Maps",
         sleep: "Sleep Analysis",
-        heart: "Heart Health Trends",
+        heart: "Heart & Cardio Fitness",
         activity: "Activity & Energy",
+        vitals: "Vitals & Body Composition",
+        nutrition: "Nutrition & Hydration",
         settings: "Application Settings",
         "setup-guide": "Self-Host Setup Guide",
         "privacy-policy": "Privacy Policy",
@@ -184,35 +247,57 @@ function switchTab(tabId, updateUrl = true) {
     const titleEl = document.getElementById("page-title");
     if (titleEl) titleEl.textContent = titles[tabId] || "Dashboard";
 
-    if (true) {
-        if (tabId === "sleep") {
-            if (!appData.sleep_loaded && !appData.sleep_loading) loadMetric("sleep");
-            else if (appData.sleep_loading) showLoadingSpinner("sleep");
-            else if (appData.sleep_loaded) {
-                populateSleepTable(appData.sleep_sessions);
-                renderSleepCharts({ sleep_sessions: appData.sleep_sessions });
-            }
-        } else if (tabId === "heart") {
-            if (!appData.heart_loaded && !appData.heart_loading) loadMetric("heart");
-            else if (appData.heart_loading) showLoadingSpinner("heart");
-            else if (appData.heart_loaded) {
-                populateHeartTable(appData.rhr_records, appData.hrv_records);
-                renderHeartCharts({ rhr_records: appData.rhr_records, hrv_records: appData.hrv_records });
-            }
-        } else if (tabId === "activity") {
-            if (!appData.activity_loaded && !appData.activity_loading) loadMetric("activity");
-            else if (appData.activity_loading) showLoadingSpinner("activity");
-            else if (appData.activity_loaded) {
-                populateActivityTable(appData.activity_records);
-                renderActivityCharts({ activity_records: appData.activity_records });
-            }
-        } else if (tabId === "overview") {
-            if (!appData.overview_loaded && !appData.overview_loading) loadMetric("overview");
-            else if (appData.overview_loading) showLoadingSpinner("overview");
-            else if (appData.overview_loaded) {
-                populateOverviewCards(appData);
-                renderOverviewCharts(appData);
-            }
+    if (tabId === "sleep") {
+        if (!appData.sleep_loaded && !appData.sleep_loading) loadMetric("sleep");
+        else if (appData.sleep_loading) showLoadingSpinner("sleep");
+        else if (appData.sleep_loaded) {
+            populateSleepTable(appData.sleep_sessions);
+            renderSleepCharts({ sleep_sessions: appData.sleep_sessions });
+        }
+    } else if (tabId === "heart") {
+        if (!appData.heart_loaded && !appData.heart_loading) loadMetric("heart");
+        else if (appData.heart_loading) showLoadingSpinner("heart");
+        else if (appData.heart_loaded) {
+            populateHeartTable(appData.rhr_records, appData.hrv_records, appData.vo2_max_records, appData.hr_zone_records);
+            renderHeartCharts(appData);
+        }
+    } else if (tabId === "activity") {
+        if (!appData.activity_loaded && !appData.activity_loading) loadMetric("activity");
+        else if (appData.activity_loading) showLoadingSpinner("activity");
+        else if (appData.activity_loaded) {
+            populateActivityTable(appData.activity_records);
+            renderActivityCharts({ activity_records: appData.activity_records });
+        }
+    } else if (tabId === "workouts") {
+        setTimeout(() => {
+            initWorkoutMap();
+            if (workoutMap) workoutMap.invalidateSize();
+        }, 50);
+        if (!appData.workouts_loaded && !appData.workouts_loading) loadMetric("workouts");
+        else if (appData.workouts_loading) showLoadingSpinner("workouts");
+        else if (appData.workouts_loaded) {
+            populateWorkoutsTab(appData.exercise_sessions);
+        }
+    } else if (tabId === "vitals") {
+        if (!appData.vitals_loaded && !appData.vitals_loading) loadMetric("vitals");
+        else if (appData.vitals_loading) showLoadingSpinner("vitals");
+        else if (appData.vitals_loaded) {
+            populateVitalsTab(appData);
+            renderVitalsCharts(appData);
+        }
+    } else if (tabId === "nutrition") {
+        if (!appData.nutrition_loaded && !appData.nutrition_loading) loadMetric("nutrition");
+        else if (appData.nutrition_loading) showLoadingSpinner("nutrition");
+        else if (appData.nutrition_loaded) {
+            populateNutritionTab(appData.nutrition_records);
+            renderNutritionCharts(appData);
+        }
+    } else if (tabId === "overview") {
+        if (!appData.overview_loaded && !appData.overview_loading) loadMetric("overview");
+        else if (appData.overview_loading) showLoadingSpinner("overview");
+        else if (appData.overview_loaded) {
+            populateOverviewCards(appData);
+            renderOverviewCharts(appData);
         }
     }
 }
@@ -243,14 +328,8 @@ async function refreshStatus() {
             oauthConfigStatus.style.background = appStatus.client_configured ? "rgba(52, 211, 153, 0.15)" : "rgba(244, 63, 94, 0.15)";
         }
 
-        const configRedirectUri = document.getElementById("config-redirect-uri");
         const guideRedirectUri = document.getElementById("guide-redirect-uri");
-        if (configRedirectUri && appStatus.redirect_uri) configRedirectUri.value = appStatus.redirect_uri;
         if (guideRedirectUri && appStatus.redirect_uri) guideRedirectUri.value = appStatus.redirect_uri;
-
-        if (appStatus.client_id_masked && document.getElementById("config-client-id") && !document.getElementById("config-client-id").value) {
-            document.getElementById("config-client-id").placeholder = "Active: " + appStatus.client_id_masked;
-        }
 
         if (appStatus.oauth_connected) {
             authIcon.className = "success-icon";
@@ -320,50 +399,8 @@ async function redirectToGoogle(scope = '') {
     }
 }
 
-async function saveServerConfig(event) {
-    event.preventDefault();
-    const btnSave = document.getElementById("btn-save-config");
-    const client_id = document.getElementById("config-client-id").value.trim();
-    const client_secret = document.getElementById("config-client-secret").value.trim();
-    const redirect_uri = document.getElementById("config-redirect-uri").value.trim();
-
-    if (!client_id || !client_secret) {
-        showToast("Please provide both Google Client ID and Client Secret.", true);
-        return;
-    }
-
-    if (btnSave) {
-        btnSave.disabled = true;
-        btnSave.innerHTML = '<i data-lucide="loader" class="spin"></i> Saving...';
-    }
-
-    try {
-        const res = await fetch("/api/config", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ client_id, client_secret, redirect_uri })
-        });
-        if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            throw new Error(errData.message || errData.error || "Failed to save configuration.");
-        }
-        const data = await res.json();
-        showToast(data.message || "Self-Hosted OAuth credentials activated successfully!");
-        document.getElementById("config-client-secret").value = "";
-        await refreshStatus();
-    } catch (e) {
-        showToast(e.message || "Error saving configuration", true);
-    } finally {
-        if (btnSave) {
-            btnSave.disabled = false;
-            btnSave.innerHTML = '<i data-lucide="save"></i> Save & Activate Instance';
-            lucide.createIcons();
-        }
-    }
-}
-
 function copyRedirectURI() {
-    const uri = (appStatus && appStatus.redirect_uri) || document.getElementById("config-redirect-uri")?.value || window.location.origin + "/oauth/callback";
+    const uri = (appStatus && appStatus.redirect_uri) || document.getElementById("guide-redirect-uri")?.value || window.location.origin + "/oauth/callback";
     navigator.clipboard.writeText(uri).then(() => {
         showToast("Redirect URI copied to clipboard!");
     }).catch(() => {
@@ -426,21 +463,32 @@ async function loadStats(forceRefresh = false) {
             renderSleepCharts({ sleep_sessions: appData.sleep_sessions });
         }
         if (appData.heart_loaded) {
-            populateHeartTable(appData.rhr_records, appData.hrv_records);
-            renderHeartCharts({ rhr_records: appData.rhr_records, hrv_records: appData.hrv_records });
+            populateHeartTable(appData.rhr_records, appData.hrv_records, appData.vo2_max_records, appData.hr_zone_records);
+            renderHeartCharts(appData);
         }
         if (appData.activity_loaded) {
             populateActivityTable(appData.activity_records);
             renderActivityCharts({ activity_records: appData.activity_records });
         }
+        if (appData.workouts_loaded) {
+            populateWorkoutsTab(appData.exercise_sessions);
+        }
+        if (appData.vitals_loaded) {
+            populateVitalsTab(appData);
+            renderVitalsCharts(appData);
+        }
+        if (appData.nutrition_loaded) {
+            populateNutritionTab(appData.nutrition_records);
+            renderNutritionCharts(appData);
+        }
 
-        if (activeTabId !== "overview" && activeTabId !== "settings" && !appData[`${activeTabId}_loaded`]) {
+        if (!["overview", "settings", "setup-guide", "privacy-policy", "terms-of-service"].includes(activeTabId) && !appData[`${activeTabId}_loaded`]) {
             await loadMetric(activeTabId);
         }
         return;
     }
 
-    if (activeTabId !== "settings" && activeTabId !== "privacy-policy" && activeTabId !== "terms-of-service") {
+    if (!["settings", "setup-guide", "privacy-policy", "terms-of-service"].includes(activeTabId)) {
         await loadMetric(activeTabId);
     } else {
         await loadMetric("overview");
@@ -451,10 +499,13 @@ function showLoadingSpinner(metric) {
     const chartMap = {
         overview: ["chart-overview-sleep", "chart-overview-heart"],
         sleep: ["chart-sleep-durations", "chart-sleep-stages"],
-        heart: ["chart-hrv", "chart-rhr"],
+        heart: ["chart-hrv", "chart-rhr", "chart-hr-zones", "chart-vo2-max"],
         rhr: ["chart-hrv", "chart-rhr"],
         hrv: ["chart-hrv", "chart-rhr"],
-        activity: ["chart-steps", "chart-calories"]
+        activity: ["chart-steps", "chart-calories", "chart-distance", "chart-floors"],
+        workouts: ["chart-workout-profile"],
+        vitals: ["chart-spo2", "chart-respiratory", "chart-skin-temp", "chart-body-comp"],
+        nutrition: ["chart-hydration", "chart-macros"]
     };
     const canvases = chartMap[metric] || [];
     canvases.forEach(cid => {
@@ -479,12 +530,27 @@ function showLoadingSpinner(metric) {
     } else if (metric === "heart" || metric === "rhr" || metric === "hrv") {
         const tbody = document.querySelector("#heart-history-table tbody");
         if (tbody && (!appData.rhr_records || appData.rhr_records.length === 0)) {
-            tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 3rem 0;"><div style="display: inline-flex; align-items: center; gap: 10px; color: var(--text-muted); font-weight: 500;"><i data-lucide="loader" class="spin" style="width: 22px; height: 22px; color: var(--primary-color);"></i> Loading heart vitals from Google Health...</div></td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 3rem 0;"><div style="display: inline-flex; align-items: center; gap: 10px; color: var(--text-muted); font-weight: 500;"><i data-lucide="loader" class="spin" style="width: 22px; height: 22px; color: var(--primary-color);"></i> Loading heart vitals from Google Health...</div></td></tr>`;
         }
     } else if (metric === "activity") {
         const tbody = document.querySelector("#activity-history-table tbody");
         if (tbody && (!appData.activity_records || appData.activity_records.length === 0)) {
-            tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 3rem 0;"><div style="display: inline-flex; align-items: center; gap: 10px; color: var(--text-muted); font-weight: 500;"><i data-lucide="loader" class="spin" style="width: 22px; height: 22px; color: var(--primary-color);"></i> Loading activity log from Google Health...</div></td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 3rem 0;"><div style="display: inline-flex; align-items: center; gap: 10px; color: var(--text-muted); font-weight: 500;"><i data-lucide="loader" class="spin" style="width: 22px; height: 22px; color: var(--primary-color);"></i> Loading activity log from Google Health...</div></td></tr>`;
+        }
+    } else if (metric === "workouts") {
+        const tbody = document.querySelector("#workouts-history-table tbody");
+        if (tbody && (!appData.exercise_sessions || appData.exercise_sessions.length === 0)) {
+            tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 3rem 0;"><div style="display: inline-flex; align-items: center; gap: 10px; color: var(--text-muted); font-weight: 500;"><i data-lucide="loader" class="spin" style="width: 22px; height: 22px; color: var(--primary-color);"></i> Loading workouts & GPS routes from Google Health...</div></td></tr>`;
+        }
+    } else if (metric === "vitals") {
+        const tbody = document.querySelector("#vitals-history-table tbody");
+        if (tbody && (!appData.spo2_records || appData.spo2_records.length === 0)) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 3rem 0;"><div style="display: inline-flex; align-items: center; gap: 10px; color: var(--text-muted); font-weight: 500;"><i data-lucide="loader" class="spin" style="width: 22px; height: 22px; color: var(--primary-color);"></i> Loading SpO2, respiratory rate & body composition...</div></td></tr>`;
+        }
+    } else if (metric === "nutrition") {
+        const tbody = document.querySelector("#nutrition-history-table tbody");
+        if (tbody && (!appData.nutrition_records || appData.nutrition_records.length === 0)) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 3rem 0;"><div style="display: inline-flex; align-items: center; gap: 10px; color: var(--text-muted); font-weight: 500;"><i data-lucide="loader" class="spin" style="width: 22px; height: 22px; color: var(--primary-color);"></i> Loading hydration & nutrition logs...</div></td></tr>`;
         }
     } else if (metric === "overview") {
         const cards = ["overview-sleep-duration", "overview-rhr", "overview-hrv", "overview-steps"];
@@ -502,10 +568,13 @@ function hideLoadingSpinner(metric) {
     const chartMap = {
         overview: ["chart-overview-sleep", "chart-overview-heart"],
         sleep: ["chart-sleep-durations", "chart-sleep-stages"],
-        heart: ["chart-hrv", "chart-rhr"],
+        heart: ["chart-hrv", "chart-rhr", "chart-hr-zones", "chart-vo2-max"],
         rhr: ["chart-hrv", "chart-rhr"],
         hrv: ["chart-hrv", "chart-rhr"],
-        activity: ["chart-steps", "chart-calories"]
+        activity: ["chart-steps", "chart-calories", "chart-distance", "chart-floors"],
+        workouts: ["chart-workout-profile"],
+        vitals: ["chart-spo2", "chart-respiratory", "chart-skin-temp", "chart-body-comp"],
+        nutrition: ["chart-hydration", "chart-macros"]
     };
     const canvases = chartMap[metric] || [];
     canvases.forEach(cid => {
@@ -531,10 +600,19 @@ function handleMissingScopes(metric, missingScopes) {
     } else if ((metric === "activity" || metric === "overview") && missingScopes.includes("activity")) {
         targetScope = "activity";
         scopeName = "Activity & Fitness";
+    } else if ((metric === "workouts" || metric === "overview") && missingScopes.includes("workouts")) {
+        targetScope = "workouts";
+        scopeName = "Workouts & GPS Location";
+    } else if ((metric === "vitals" || metric === "overview") && missingScopes.includes("vitals")) {
+        targetScope = "vitals";
+        scopeName = "Vitals & Body Measurements";
+    } else if ((metric === "nutrition" || metric === "overview") && missingScopes.includes("nutrition")) {
+        targetScope = "nutrition";
+        scopeName = "Nutrition & Hydration";
     }
 
     if (targetScope && appStatus.oauth_connected) {
-        showToast(`Permission required: You did not grant read permission for ${scopeName} data. Click 'Connect Google Health' on the settings page to grant this scope on demand.`, true);
+        showToast(`Permission required: Grant read permission for ${scopeName} data via Settings -> Connect Google Health.`, true);
     }
 }
 
@@ -572,8 +650,18 @@ async function loadMetric(metric, pageToken = "") {
             if (!appData.heart_loaded) {
                 appData.rhr_records = data.rhr_records || [];
                 appData.hrv_records = data.hrv_records || [];
+                appData.hr_zone_records = data.hr_zone_records || [];
+                appData.vo2_max_records = data.vo2_max_records || [];
             }
             if (!appData.activity_loaded) appData.activity_records = data.activity_records || [];
+            if (!appData.workouts_loaded) appData.exercise_sessions = data.exercise_sessions || [];
+            if (!appData.vitals_loaded) {
+                appData.spo2_records = data.spo2_records || [];
+                appData.respiratory_records = data.respiratory_records || [];
+                appData.sleep_temp_records = data.sleep_temp_records || [];
+                appData.body_records = data.body_records || [];
+            }
+            if (!appData.nutrition_loaded) appData.nutrition_records = data.nutrition_records || [];
             populateOverviewCards(appData);
             renderOverviewCharts(appData);
         } else if (metric === "sleep") {
@@ -603,9 +691,13 @@ async function loadMetric(metric, pageToken = "") {
                 }
                 appData.hrv_next_page_token = data.hrv_next_page_token || "";
             }
-            populateHeartTable(appData.rhr_records, appData.hrv_records);
+            if (!pageToken) {
+                appData.hr_zone_records = data.hr_zone_records || [];
+                appData.vo2_max_records = data.vo2_max_records || [];
+            }
+            populateHeartTable(appData.rhr_records, appData.hrv_records, appData.vo2_max_records, appData.hr_zone_records);
             appData.heart_loaded = true;
-            renderHeartCharts({ rhr_records: appData.rhr_records, hrv_records: appData.hrv_records });
+            renderHeartCharts(appData);
         } else if (metric === "activity") {
             if (pageToken) {
                 appData.activity_records = appData.activity_records.concat(data.activity_records || []);
@@ -616,6 +708,28 @@ async function loadMetric(metric, pageToken = "") {
             appData.activity_loaded = true;
             populateActivityTable(appData.activity_records);
             renderActivityCharts({ activity_records: appData.activity_records });
+        } else if (metric === "workouts") {
+            if (pageToken) {
+                appData.exercise_sessions = appData.exercise_sessions.concat(data.exercise_sessions || []);
+            } else {
+                appData.exercise_sessions = data.exercise_sessions || [];
+            }
+            appData.exercise_next_page_token = data.exercise_next_page_token || "";
+            appData.workouts_loaded = true;
+            populateWorkoutsTab(appData.exercise_sessions);
+        } else if (metric === "vitals") {
+            appData.spo2_records = data.spo2_records || [];
+            appData.respiratory_records = data.respiratory_records || [];
+            appData.sleep_temp_records = data.sleep_temp_records || [];
+            appData.body_records = data.body_records || [];
+            appData.vitals_loaded = true;
+            populateVitalsTab(appData);
+            renderVitalsCharts(appData);
+        } else if (metric === "nutrition") {
+            appData.nutrition_records = data.nutrition_records || [];
+            appData.nutrition_loaded = true;
+            populateNutritionTab(appData.nutrition_records);
+            renderNutritionCharts(appData);
         }
         saveCache();
     } catch (e) {
@@ -625,8 +739,11 @@ async function loadMetric(metric, pageToken = "") {
         hideLoadingSpinner(metric);
         if (!appData[`${metric}_loaded`]) {
             if (metric === "sleep") populateSleepTable(appData.sleep_sessions || []);
-            else if (metric === "heart") populateHeartTable(appData.rhr_records || [], appData.hrv_records || []);
+            else if (metric === "heart") populateHeartTable(appData.rhr_records || [], appData.hrv_records || [], appData.vo2_max_records || [], appData.hr_zone_records || []);
             else if (metric === "activity") populateActivityTable(appData.activity_records || []);
+            else if (metric === "workouts") populateWorkoutsTab(appData.exercise_sessions || []);
+            else if (metric === "vitals") populateVitalsTab(appData);
+            else if (metric === "nutrition") populateNutritionTab(appData.nutrition_records || []);
             else if (metric === "overview") populateOverviewCards(appData);
         }
     }
@@ -721,7 +838,7 @@ function populateSleepTable(sessions) {
     }
 }
 
-function populateHeartTable(rhrRecords, hrvRecords) {
+function populateHeartTable(rhrRecords, hrvRecords, vo2Records, zoneRecords) {
     const tbody = document.querySelector("#heart-history-table tbody");
     if (!tbody) return;
     tbody.innerHTML = "";
@@ -730,20 +847,30 @@ function populateHeartTable(rhrRecords, hrvRecords) {
     (rhrRecords || []).forEach(r => rhrMap[r.date] = r);
     const hrvMap = {};
     (hrvRecords || []).forEach(r => hrvMap[r.date] = r);
+    const vo2Map = {};
+    (vo2Records || []).forEach(r => vo2Map[r.date] = r);
+    const zoneMap = {};
+    (zoneRecords || []).forEach(r => zoneMap[r.date] = r);
 
     const dates = Array.from(new Set([
         ...Object.keys(rhrMap),
-        ...Object.keys(hrvMap)
+        ...Object.keys(hrvMap),
+        ...Object.keys(vo2Map),
+        ...Object.keys(zoneMap)
     ])).sort().reverse();
 
     if (dates.length > 0) {
         dates.forEach(d => {
             const rhr = rhrMap[d];
             const hrv = hrvMap[d];
+            const vo2 = vo2Map[d];
+            const zn = zoneMap[d];
             const tr = document.createElement("tr");
             const rhrVal = rhr ? `<strong>${rhr.beats_per_minute}</strong> BPM` : "--";
             const hrvVal = hrv ? `<strong>${Math.round(hrv.avg_hrv_ms)}</strong> ms` : "--";
             const deepVal = (hrv && hrv.deep_sleep_rmssd) ? `${Math.round(hrv.deep_sleep_rmssd)} ms` : "--";
+            const vo2Val = vo2 ? `<strong>${vo2.vo2_max}</strong> mL/kg/min` : "--";
+            const znVal = zn ? `${zn.moderate_minutes + zn.vigorous_minutes + zn.peak_minutes}m (${zn.peak_minutes}m peak)` : "--";
             
             let status = `<span class="badge badge-normal">Normal</span>`;
             if (rhr && rhr.beats_per_minute > 80) status = `<span class="badge badge-warning">Elevated RHR</span>`;
@@ -754,12 +881,14 @@ function populateHeartTable(rhrRecords, hrvRecords) {
                 <td>${rhrVal}</td>
                 <td>${hrvVal}</td>
                 <td>${deepVal}</td>
+                <td>${vo2Val}</td>
+                <td>${znVal}</td>
                 <td>${status}</td>
             `;
             tbody.appendChild(tr);
         });
     } else {
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
     }
 }
 
@@ -774,10 +903,15 @@ function populateActivityTable(records) {
             const badgeClass = goalMet ? "badge badge-success" : "badge badge-outline";
             const iconName = goalMet ? "check-circle-2" : "circle-dashed";
             const goalText = goalMet ? "Yes" : "No";
+            const distStr = a.distance_km ? `${a.distance_km.toFixed(2)} km` : "--";
+            const floorsStr = a.floors !== undefined ? `${a.floors} fl` : "--";
+            const totalCals = a.basal_calories ? `${a.calories_burned} / ${(a.calories_burned + a.basal_calories).toLocaleString()} kcal` : `${a.calories_burned} kcal`;
             tr.innerHTML = `
                 <td>${a.date}</td>
                 <td><strong>${a.steps.toLocaleString()}</strong></td>
-                <td>${a.calories_burned} kcal</td>
+                <td>${distStr}</td>
+                <td>${floorsStr}</td>
+                <td>${totalCals}</td>
                 <td>${a.active_minutes} mins</td>
                 <td><span class="${badgeClass}" style="gap: 6px;"><i data-lucide="${iconName}" style="width: 15px; height: 15px;"></i>${goalText} (${Math.round((a.steps / 10000) * 100)}%)</span></td>
             `;
@@ -785,7 +919,7 @@ function populateActivityTable(records) {
         });
         if (typeof lucide !== "undefined" && lucide.createIcons) lucide.createIcons();
     } else {
-        actTbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
+        actTbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
     }
 }
 
@@ -820,6 +954,9 @@ function checkInfiniteScroll() {
         } else if (tabId === "activity" && appData.activity_next_page_token && !appData.activity_loading) {
             showToast("Loading more activity history...");
             loadMetric("activity", appData.activity_next_page_token);
+        } else if (tabId === "workouts" && appData.exercise_next_page_token && !appData.workouts_loading) {
+            showToast("Loading more workout sessions...");
+            loadMetric("workouts", appData.exercise_next_page_token);
         }
     }
 }
@@ -1113,6 +1250,63 @@ function renderHeartCharts(data) {
             }
         });
     }
+
+    // 3. Daily Heart Rate Zones Chart
+    if (data.hr_zone_records && data.hr_zone_records.length > 0) {
+        const zDates = [...data.hr_zone_records].slice(0, 14).reverse();
+        const labels = zDates.map(z => new Date(z.date).toLocaleDateString([], { month: 'short', day: 'numeric' }));
+        renderChart("chart-hr-zones", {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'Light', data: zDates.map(z => z.light_minutes), backgroundColor: '#38bdf8' },
+                    { label: 'Moderate (Fat Burn)', data: zDates.map(z => z.moderate_minutes), backgroundColor: '#34d399' },
+                    { label: 'Vigorous (Cardio)', data: zDates.map(z => z.vigorous_minutes), backgroundColor: '#f59e0b' },
+                    { label: 'Peak', data: zDates.map(z => z.peak_minutes), backgroundColor: '#f43f5e' }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: '#94a3b8' } } },
+                scales: {
+                    x: { stacked: true, grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } },
+                    y: { stacked: true, grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' }, title: { display: true, text: 'Minutes', color: '#94a3b8' } }
+                }
+            }
+        });
+    }
+
+    // 4. VO2 Max Chart
+    if (data.vo2_max_records && data.vo2_max_records.length > 0) {
+        const vDates = [...data.vo2_max_records].slice(0, 14).reverse();
+        renderChart("chart-vo2-max", {
+            type: 'line',
+            data: {
+                labels: vDates.map(r => new Date(r.date).toLocaleDateString([], { month: 'short', day: 'numeric' })),
+                datasets: [{
+                    label: 'VO2 Max (mL/kg/min)',
+                    data: vDates.map(r => r.vo2_max),
+                    borderColor: '#a855f7',
+                    backgroundColor: 'rgba(168, 85, 247, 0.08)',
+                    borderWidth: 3,
+                    pointBackgroundColor: '#a855f7',
+                    tension: 0.35,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: '#94a3b8' } } },
+                scales: {
+                    x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } },
+                    y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' }, title: { display: true, text: 'mL/kg/min', color: '#a855f7' } }
+                }
+            }
+        });
+    }
 }
 
 function renderActivityCharts(data) {
@@ -1146,16 +1340,719 @@ function renderActivityCharts(data) {
         }
     });
 
-    // Chart 2: Calories burned
+    // Chart 2: Active & Basal Calories burned
     renderChart("chart-calories", {
         type: 'bar',
         data: {
             labels: dates,
+            datasets: [
+                {
+                    label: 'Active Energy (kcal)',
+                    data: recentAct.map(a => a.calories_burned),
+                    backgroundColor: 'rgba(244, 63, 94, 0.65)',
+                    borderColor: '#f43f5e',
+                    borderWidth: 1,
+                    borderRadius: 4
+                },
+                {
+                    label: 'Basal Energy (kcal)',
+                    data: recentAct.map(a => a.basal_calories || 0),
+                    backgroundColor: 'rgba(148, 163, 184, 0.25)',
+                    borderColor: '#64748b',
+                    borderWidth: 1,
+                    borderRadius: 4
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: '#94a3b8' } } },
+            scales: {
+                x: { stacked: true, grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } },
+                y: { stacked: true, grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } }
+            }
+        }
+    });
+
+    // Chart 3: Daily Distance (km)
+    renderChart("chart-distance", {
+        type: 'line',
+        data: {
+            labels: dates,
             datasets: [{
-                label: 'Active Energy (kcal)',
-                data: recentAct.map(a => a.calories_burned),
-                backgroundColor: 'rgba(244, 63, 94, 0.5)',
-                borderColor: '#f43f5e',
+                label: 'Distance (km)',
+                data: recentAct.map(a => a.distance_km || 0),
+                borderColor: '#38bdf8',
+                backgroundColor: 'rgba(56, 189, 248, 0.08)',
+                borderWidth: 3,
+                pointBackgroundColor: '#38bdf8',
+                tension: 0.35,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: '#94a3b8' } } },
+            scales: {
+                x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } },
+                y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' }, title: { display: true, text: 'km', color: '#38bdf8' } }
+            }
+        }
+    });
+
+    // Chart 4: Floors Climbed & Active Minutes
+    renderChart("chart-floors", {
+        type: 'bar',
+        data: {
+            labels: dates,
+            datasets: [
+                {
+                    label: 'Floors Climbed',
+                    data: recentAct.map(a => a.floors || 0),
+                    backgroundColor: 'rgba(168, 85, 247, 0.6)',
+                    borderColor: '#a855f7',
+                    borderWidth: 2,
+                    borderRadius: 4,
+                    yAxisID: 'y'
+                },
+                {
+                    type: 'line',
+                    label: 'Active Minutes',
+                    data: recentAct.map(a => a.active_minutes || 0),
+                    borderColor: '#34d399',
+                    pointBackgroundColor: '#34d399',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: '#94a3b8' } } },
+            scales: {
+                x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } },
+                y: { type: 'linear', position: 'left', beginAtZero: true, grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' }, title: { display: true, text: 'Floors', color: '#a855f7' } },
+                y1: { type: 'linear', position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { color: '#94a3b8' }, title: { display: true, text: 'Mins', color: '#34d399' } }
+            }
+        }
+    });
+}
+
+// ==========================================
+// WORKOUTS & STRAVA-STYLE GPS ROUTE MAPS
+// ==========================================
+
+function initWorkoutMap() {
+    const mapContainer = document.getElementById("workout-route-map");
+    if (!mapContainer || typeof L === "undefined") return;
+    if (workoutMap) return;
+
+    workoutMap = L.map("workout-route-map", {
+        zoomControl: true,
+        attributionControl: true
+    }).setView([51.5073, -0.1657], 13);
+
+    // Dark-mode CartoDB Matter map tiles matching Pulse's dark glass UI
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+        subdomains: "abcd",
+        maxZoom: 19
+    }).addTo(workoutMap);
+
+    workoutRouteLayer = L.layerGroup().addTo(workoutMap);
+}
+
+function formatPace(durationMins, distKm) {
+    if (!distKm || distKm <= 0.05 || !durationMins) return "--";
+    const paceDec = durationMins / distKm;
+    const pMin = Math.floor(paceDec);
+    const pSec = Math.round((paceDec - pMin) * 60);
+    return `${pMin}:${pSec < 10 ? '0' : ''}${pSec} /km`;
+}
+
+function populateWorkoutsTab(sessions) {
+    initWorkoutMap();
+    const list = sessions || [];
+
+    // Summary Cards
+    const countEl = document.getElementById("workouts-total-count");
+    const latestEl = document.getElementById("workouts-latest-name");
+    const distEl = document.getElementById("workouts-total-dist");
+    const paceEl = document.getElementById("workouts-avg-pace");
+    const hrEl = document.getElementById("workouts-avg-hr");
+    const azmEl = document.getElementById("workouts-total-azm");
+    const calsEl = document.getElementById("workouts-total-cals");
+    const minsEl = document.getElementById("workouts-total-mins");
+
+    let totalDist = 0, totalCals = 0, totalMins = 0, totalAzm = 0, hrSum = 0, hrCnt = 0;
+    list.forEach(w => {
+        totalDist += (w.distance_km || 0);
+        totalCals += (w.calories_kcal || 0);
+        totalMins += (w.duration_minutes || 0);
+        totalAzm += (w.active_zone_minutes || 0);
+        if (w.avg_heart_rate > 0) {
+            hrSum += w.avg_heart_rate;
+            hrCnt++;
+        }
+    });
+
+    if (countEl) countEl.textContent = list.length;
+    if (latestEl) latestEl.textContent = list.length > 0 ? `Latest: ${list[0].display_name}` : "No workouts recorded";
+    if (distEl) distEl.innerHTML = `${totalDist.toFixed(1)} <span class="unit">km</span>`;
+    if (paceEl) paceEl.textContent = totalDist > 0 ? `Avg Pace: ${formatPace(totalMins, totalDist)}` : "Outdoor & indoor sessions";
+    if (hrEl) hrEl.innerHTML = `${hrCnt > 0 ? Math.round(hrSum / hrCnt) : '--'} <span class="unit">BPM</span>`;
+    if (azmEl) azmEl.textContent = `${totalAzm} Active Zone Mins`;
+    if (calsEl) calsEl.innerHTML = `${totalCals.toLocaleString()} <span class="unit">kcal</span>`;
+    if (minsEl) minsEl.textContent = `${totalMins} total active minutes`;
+
+    // Table
+    const tbody = document.querySelector("#workouts-history-table tbody");
+    if (!tbody) return;
+    tbody.innerHTML = "";
+
+    if (list.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">No workout sessions found.</td></tr>`;
+        return;
+    }
+
+    list.forEach((w, idx) => {
+        const tr = document.createElement("tr");
+        tr.style.cursor = "pointer";
+        tr.id = `workout-row-${w.id}`;
+        tr.onclick = () => selectWorkoutRoute(w);
+
+        const dt = new Date(w.start_time);
+        const dateStr = dt.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+        const timeStr = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const distStr = w.distance_km > 0 ? `<strong>${w.distance_km.toFixed(2)} km</strong>` : "--";
+        const paceStr = formatPace(w.duration_minutes, w.distance_km);
+        const hrStr = w.avg_heart_rate > 0 ? `${w.avg_heart_rate} BPM` : "--";
+        const zonesStr = `${w.moderate_zone_mins || 0}m Mod / ${w.vigorous_zone_mins || 0}m Vig / ${w.peak_zone_mins || 0}m Peak`;
+        const mapBtn = w.has_gps
+            ? `<button class="btn btn-secondary" style="padding: 5px 11px; font-size: 0.78rem;" onclick="event.stopPropagation(); selectWorkoutRouteById('${w.id}')"><i data-lucide="map-pin" style="width: 13px; height: 13px;"></i> View Map</button>`
+            : `<span class="badge badge-outline">Indoor</span>`;
+
+        tr.innerHTML = `
+            <td>${dateStr} <span style="color: var(--text-muted); font-size: 0.8rem;">${timeStr}</span></td>
+            <td><strong>${w.display_name}</strong> <span class="badge badge-outline" style="margin-left: 6px; font-size: 0.72rem;">${w.exercise_type}</span></td>
+            <td>${w.duration_minutes}m</td>
+            <td>${distStr}</td>
+            <td>${paceStr}</td>
+            <td>${hrStr}</td>
+            <td>${w.calories_kcal} kcal</td>
+            <td style="font-size: 0.82rem; color: var(--text-secondary);">${zonesStr}</td>
+            <td>${mapBtn}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    if (typeof lucide !== "undefined" && lucide.createIcons) lucide.createIcons();
+
+    // Auto-select first GPS workout (or first workout)
+    const firstGps = list.find(w => w.has_gps) || list[0];
+    if (firstGps) {
+        selectWorkoutRoute(firstGps);
+    }
+}
+
+function selectWorkoutRouteById(id) {
+    const w = (appData.exercise_sessions || []).find(s => s.id === id);
+    if (w) selectWorkoutRoute(w);
+}
+
+async function selectWorkoutRoute(workout) {
+    if (!workout) return;
+    selectedExerciseId = workout.id;
+
+    // Highlight active row
+    document.querySelectorAll("#workouts-history-table tbody tr").forEach(tr => {
+        tr.style.background = tr.id === `workout-row-${workout.id}` ? "rgba(139, 92, 246, 0.12)" : "";
+    });
+
+    const titleEl = document.getElementById("map-workout-title");
+    const subEl = document.getElementById("map-workout-subtitle");
+    const badgeEl = document.getElementById("map-gps-badge");
+    const dtStr = new Date(workout.start_time).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+
+    if (titleEl) titleEl.textContent = `${workout.display_name} — ${dtStr}`;
+    if (subEl) {
+        subEl.textContent = `${workout.duration_minutes} mins • ${workout.distance_km > 0 ? workout.distance_km.toFixed(2) + ' km • Pace ' + formatPace(workout.duration_minutes, workout.distance_km) + ' • ' : ''}${workout.calories_kcal} kcal • Avg HR ${workout.avg_heart_rate || '--'} BPM`;
+    }
+
+    // Update HR Zone breakdown bar for this workout
+    const lM = workout.light_zone_mins || 0;
+    const mM = workout.moderate_zone_mins || 0;
+    const vM = workout.vigorous_zone_mins || 0;
+    const pM = workout.peak_zone_mins || 0;
+    const totZ = Math.max(1, lM + mM + vM + pM);
+    const zSumEl = document.getElementById("workout-zones-summary");
+    if (zSumEl) {
+        zSumEl.textContent = `Light ${lM}m • Moderate ${mM}m • Vigorous ${vM}m • Peak ${pM}m`;
+    }
+    const zBar = document.getElementById("workout-zones-bar");
+    if (zBar) {
+        zBar.innerHTML = `
+            <div style="width: ${(lM / totZ) * 100}%; background: #38bdf8;" title="Light: ${lM}m"></div>
+            <div style="width: ${(mM / totZ) * 100}%; background: #34d399;" title="Moderate: ${mM}m"></div>
+            <div style="width: ${(vM / totZ) * 100}%; background: #f59e0b;" title="Vigorous: ${vM}m"></div>
+            <div style="width: ${(pM / totZ) * 100}%; background: #f43f5e;" title="Peak: ${pM}m"></div>
+        `;
+    }
+
+    initWorkoutMap();
+    if (workoutMap) workoutMap.invalidateSize();
+
+    try {
+        const res = await fetch(`/api/exercise-route?id=${encodeURIComponent(workout.id)}`);
+        const routeData = await res.json();
+        renderWorkoutRouteOnMap(workout, routeData);
+        renderWorkoutProfileChart(workout, routeData);
+        if (badgeEl) {
+            if (routeData && routeData.has_route && routeData.points && routeData.points.length > 0) {
+                badgeEl.textContent = `GPS Track (${routeData.points.length} pts)`;
+                badgeEl.style.color = "var(--color-emerald)";
+                badgeEl.style.background = "rgba(52, 211, 153, 0.15)";
+            } else {
+                badgeEl.textContent = "Indoor / No GPS Track";
+                badgeEl.style.color = "var(--text-muted)";
+                badgeEl.style.background = "rgba(255, 255, 255, 0.06)";
+            }
+        }
+    } catch (e) {
+        console.warn("Failed to load exercise route:", e);
+    }
+}
+
+function renderWorkoutRouteOnMap(workout, routeData) {
+    if (!workoutMap || !workoutRouteLayer) return;
+    workoutRouteLayer.clearLayers();
+
+    if (!routeData || !routeData.has_route || !routeData.points || routeData.points.length === 0) {
+        return;
+    }
+
+    const latlngs = routeData.points.map(p => [p.lat, p.lng]);
+
+    // Outer glow line (Strava orange/emerald neon glow)
+    L.polyline(latlngs, {
+        color: "#f97316",
+        weight: 9,
+        opacity: 0.25,
+        lineCap: "round",
+        lineJoin: "round"
+    }).addTo(workoutRouteLayer);
+
+    // Core route polyline
+    const routeLine = L.polyline(latlngs, {
+        color: "#fb923c",
+        weight: 4,
+        opacity: 0.95,
+        lineCap: "round",
+        lineJoin: "round"
+    }).addTo(workoutRouteLayer);
+
+    // Start Marker (Green)
+    const startPt = routeData.points[0];
+    L.circleMarker([startPt.lat, startPt.lng], {
+        radius: 7,
+        fillColor: "#34d399",
+        color: "#0f172a",
+        weight: 2,
+        fillOpacity: 1
+    }).bindPopup(`<strong>Start: ${workout.display_name}</strong><br>HR: ${startPt.heart_rate_bpm || '--'} BPM`).addTo(workoutRouteLayer);
+
+    // Finish Marker (Rose/Red)
+    const endPt = routeData.points[routeData.points.length - 1];
+    L.circleMarker([endPt.lat, endPt.lng], {
+        radius: 7,
+        fillColor: "#f43f5e",
+        color: "#0f172a",
+        weight: 2,
+        fillOpacity: 1
+    }).bindPopup(`<strong>Finish</strong><br>Distance: ${(endPt.distance_meters / 1000).toFixed(2)} km<br>Final HR: ${endPt.heart_rate_bpm || '--'} BPM`).addTo(workoutRouteLayer);
+
+    workoutMap.fitBounds(routeLine.getBounds(), { padding: [28, 28] });
+}
+
+function renderWorkoutProfileChart(workout, routeData) {
+    const pts = (routeData && routeData.points && routeData.points.length > 0) ? routeData.points : [];
+    if (pts.length === 0) {
+        renderChart("chart-workout-profile", {
+            type: 'bar',
+            data: {
+                labels: ['Light', 'Moderate', 'Vigorous', 'Peak'],
+                datasets: [{
+                    label: 'Minutes in Zone',
+                    data: [
+                        workout.light_zone_mins || 0,
+                        workout.moderate_zone_mins || 0,
+                        workout.vigorous_zone_mins || 0,
+                        workout.peak_zone_mins || 0
+                    ],
+                    backgroundColor: ['#38bdf8', '#34d399', '#f59e0b', '#f43f5e'],
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } },
+                    y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' }, title: { display: true, text: 'Minutes', color: '#94a3b8' } }
+                }
+            }
+        });
+        return;
+    }
+
+    const labels = pts.map(p => `${(p.distance_meters / 1000).toFixed(1)} km`);
+    renderChart("chart-workout-profile", {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Heart Rate (BPM)',
+                    data: pts.map(p => p.heart_rate_bpm),
+                    borderColor: '#f43f5e',
+                    backgroundColor: 'rgba(244, 63, 94, 0.05)',
+                    borderWidth: 2.5,
+                    pointRadius: 0,
+                    tension: 0.3,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Elevation (m)',
+                    data: pts.map(p => p.altitude_meters),
+                    borderColor: '#38bdf8',
+                    backgroundColor: 'rgba(56, 189, 248, 0.14)',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    fill: true,
+                    tension: 0.35,
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { labels: { color: '#94a3b8' } } },
+            scales: {
+                x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8', maxTicksLimit: 8 } },
+                y: { type: 'linear', position: 'left', grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' }, title: { display: true, text: 'BPM', color: '#f43f5e' } },
+                y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, ticks: { color: '#94a3b8' }, title: { display: true, text: 'Elev (m)', color: '#38bdf8' } }
+            }
+        }
+    });
+}
+
+// ==========================================
+// VITALS & BODY COMPOSITION TAB
+// ==========================================
+
+function populateVitalsTab(data) {
+    const spo2s = data.spo2_records || [];
+    const resps = data.respiratory_records || [];
+    const temps = data.sleep_temp_records || [];
+    const bodys = data.body_records || [];
+
+    // Cards
+    const spo2Val = document.getElementById("vitals-spo2-val");
+    const spo2Sub = document.getElementById("vitals-spo2-sub");
+    if (spo2s.length > 0) {
+        const latest = spo2s[0];
+        if (spo2Val) spo2Val.textContent = `${latest.avg_percent.toFixed(1)}%`;
+        if (spo2Sub) spo2Sub.textContent = `Range: ${latest.min_percent.toFixed(1)}% – ${latest.max_percent.toFixed(1)}% (${latest.date})`;
+    }
+
+    const respVal = document.getElementById("vitals-resp-val");
+    const respSub = document.getElementById("vitals-resp-sub");
+    if (resps.length > 0) {
+        const latest = resps[0];
+        if (respVal) respVal.innerHTML = `${latest.breaths_per_minute.toFixed(1)} <span class="unit">brpm</span>`;
+        if (respSub) respSub.textContent = `Recorded on ${latest.date}`;
+    }
+
+    const tempVal = document.getElementById("vitals-temp-val");
+    const tempSub = document.getElementById("vitals-temp-sub");
+    if (temps.length > 0) {
+        const latest = temps[0];
+        const sign = latest.delta_c >= 0 ? "+" : "";
+        if (tempVal) tempVal.textContent = `${latest.nightly_temp_c.toFixed(2)}°C`;
+        if (tempSub) tempSub.textContent = `${sign}${latest.delta_c.toFixed(2)}°C vs ${latest.baseline_c.toFixed(2)}°C baseline`;
+    }
+
+    const weightVal = document.getElementById("vitals-weight-val");
+    const weightSub = document.getElementById("vitals-weight-sub");
+    if (bodys.length > 0) {
+        const latest = bodys[0];
+        if (weightVal) weightVal.innerHTML = `${latest.weight_kg ? latest.weight_kg.toFixed(1) : '--'} <span class="unit">kg</span>`;
+        if (weightSub) weightSub.textContent = latest.body_fat_pct ? `Body Fat: ${latest.body_fat_pct.toFixed(1)}% (${latest.date})` : `Recorded on ${latest.date}`;
+    }
+
+    // Table
+    const tbody = document.querySelector("#vitals-history-table tbody");
+    if (!tbody) return;
+    tbody.innerHTML = "";
+
+    const spo2Map = {}, respMap = {}, tempMap = {}, bodyMap = {};
+    spo2s.forEach(r => spo2Map[r.date] = r);
+    resps.forEach(r => respMap[r.date] = r);
+    temps.forEach(r => tempMap[r.date] = r);
+    bodys.forEach(r => bodyMap[r.date] = r);
+
+    const dates = Array.from(new Set([
+        ...Object.keys(spo2Map),
+        ...Object.keys(respMap),
+        ...Object.keys(tempMap),
+        ...Object.keys(bodyMap)
+    ])).sort().reverse();
+
+    if (dates.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No records found.</td></tr>`;
+        return;
+    }
+
+    dates.forEach(d => {
+        const sp = spo2Map[d];
+        const rp = respMap[d];
+        const tp = tempMap[d];
+        const bd = bodyMap[d];
+        const tr = document.createElement("tr");
+
+        const spStr = sp ? `<strong>${sp.avg_percent.toFixed(1)}%</strong> <span style="color: var(--text-muted); font-size: 0.8rem;">(${sp.min_percent.toFixed(0)}–${sp.max_percent.toFixed(0)}%)</span>` : "--";
+        const rpStr = rp ? `<strong>${rp.breaths_per_minute.toFixed(1)}</strong> brpm` : "--";
+        const tpStr = tp ? `${tp.nightly_temp_c.toFixed(2)}°C <span class="badge badge-outline" style="margin-left: 4px;">${tp.delta_c >= 0 ? '+' : ''}${tp.delta_c.toFixed(2)}°C</span>` : "--";
+        const wtStr = (bd && bd.weight_kg) ? `<strong>${bd.weight_kg.toFixed(1)} kg</strong>` : "--";
+        const bfStr = (bd && bd.body_fat_pct) ? `${bd.body_fat_pct.toFixed(1)}%` : "--";
+
+        tr.innerHTML = `
+            <td>${d}</td>
+            <td>${spStr}</td>
+            <td>${rpStr}</td>
+            <td>${tpStr}</td>
+            <td>${wtStr}</td>
+            <td>${bfStr}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function renderVitalsCharts(data) {
+    // 1. SpO2 Chart
+    if (data.spo2_records && data.spo2_records.length > 0) {
+        const recent = [...data.spo2_records].slice(0, 14).reverse();
+        const labels = recent.map(r => new Date(r.date).toLocaleDateString([], { month: 'short', day: 'numeric' }));
+        renderChart("chart-spo2", {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Avg SpO2 (%)',
+                        data: recent.map(r => r.avg_percent),
+                        borderColor: '#38bdf8',
+                        backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                        borderWidth: 3,
+                        tension: 0.3,
+                        fill: true
+                    },
+                    {
+                        label: 'Lower Bound (%)',
+                        data: recent.map(r => r.min_percent),
+                        borderColor: '#f43f5e',
+                        borderDash: [5, 5],
+                        borderWidth: 2,
+                        tension: 0.3,
+                        fill: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: '#94a3b8' } } },
+                scales: {
+                    x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } },
+                    y: { suggestedMin: 88, suggestedMax: 100, grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' }, title: { display: true, text: 'SpO2 %', color: '#38bdf8' } }
+                }
+            }
+        });
+    }
+
+    // 2. Respiratory Rate Chart
+    if (data.respiratory_records && data.respiratory_records.length > 0) {
+        const recent = [...data.respiratory_records].slice(0, 14).reverse();
+        renderChart("chart-respiratory", {
+            type: 'line',
+            data: {
+                labels: recent.map(r => new Date(r.date).toLocaleDateString([], { month: 'short', day: 'numeric' })),
+                datasets: [{
+                    label: 'Breaths / Min',
+                    data: recent.map(r => r.breaths_per_minute),
+                    borderColor: '#34d399',
+                    backgroundColor: 'rgba(52, 211, 153, 0.08)',
+                    borderWidth: 3,
+                    pointBackgroundColor: '#34d399',
+                    tension: 0.35,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: '#94a3b8' } } },
+                scales: {
+                    x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } },
+                    y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' }, title: { display: true, text: 'brpm', color: '#34d399' } }
+                }
+            }
+        });
+    }
+
+    // 3. Skin Temp Chart
+    if (data.sleep_temp_records && data.sleep_temp_records.length > 0) {
+        const recent = [...data.sleep_temp_records].slice(0, 14).reverse();
+        renderChart("chart-skin-temp", {
+            type: 'bar',
+            data: {
+                labels: recent.map(r => new Date(r.date).toLocaleDateString([], { month: 'short', day: 'numeric' })),
+                datasets: [{
+                    label: 'Δ from Baseline (°C)',
+                    data: recent.map(r => r.delta_c),
+                    backgroundColor: recent.map(r => r.delta_c >= 0 ? 'rgba(244, 63, 94, 0.65)' : 'rgba(56, 189, 248, 0.65)'),
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: '#94a3b8' } } },
+                scales: {
+                    x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } },
+                    y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' }, title: { display: true, text: 'Δ °C', color: '#f43f5e' } }
+                }
+            }
+        });
+    }
+
+    // 4. Body Composition Chart
+    if (data.body_records && data.body_records.length > 0) {
+        const recent = [...data.body_records].slice(0, 14).reverse();
+        const labels = recent.map(r => new Date(r.date).toLocaleDateString([], { month: 'short', day: 'numeric' }));
+        renderChart("chart-body-comp", {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Weight (kg)',
+                        data: recent.map(r => r.weight_kg || null),
+                        borderColor: '#a855f7',
+                        pointBackgroundColor: '#a855f7',
+                        borderWidth: 3,
+                        tension: 0.3,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: 'Body Fat (%)',
+                        data: recent.map(r => r.body_fat_pct || null),
+                        borderColor: '#f59e0b',
+                        pointBackgroundColor: '#f59e0b',
+                        borderWidth: 2.5,
+                        tension: 0.3,
+                        yAxisID: 'y1'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: '#94a3b8' } } },
+                scales: {
+                    x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } },
+                    y: { type: 'linear', position: 'left', grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' }, title: { display: true, text: 'kg', color: '#a855f7' } },
+                    y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, ticks: { color: '#94a3b8' }, title: { display: true, text: 'Body Fat %', color: '#f59e0b' } }
+                }
+            }
+        });
+    }
+}
+
+// ==========================================
+// NUTRITION & HYDRATION TAB
+// ==========================================
+
+function populateNutritionTab(records) {
+    const list = records || [];
+    const waterVal = document.getElementById("nut-water-val");
+    const waterSub = document.getElementById("nut-water-sub");
+    const calsVal = document.getElementById("nut-cals-val");
+    const calsSub = document.getElementById("nut-cals-sub");
+    const protVal = document.getElementById("nut-protein-val");
+    const protSub = document.getElementById("nut-protein-sub");
+    const macVal = document.getElementById("nut-macros-val");
+    const macSub = document.getElementById("nut-macros-sub");
+
+    if (list.length > 0) {
+        const latest = list[0];
+        if (waterVal) waterVal.innerHTML = `${latest.hydration_ml.toLocaleString()} <span class="unit">ml</span>`;
+        if (waterSub) waterSub.textContent = `${Math.round((latest.hydration_ml / 2500) * 100)}% of 2,500 ml goal (${latest.date})`;
+        if (calsVal) calsVal.innerHTML = `${latest.calories_in.toLocaleString()} <span class="unit">kcal</span>`;
+        if (calsSub) calsSub.textContent = `${latest.meals_logged} meals logged on ${latest.date}`;
+        if (protVal) protVal.innerHTML = `${Math.round(latest.protein_g)} <span class="unit">g</span>`;
+        if (protSub) protSub.textContent = `${Math.round((latest.protein_g * 4 / Math.max(1, latest.calories_in)) * 100)}% of calories from protein`;
+        if (macVal) macVal.textContent = `${Math.round(latest.carbs_g)}g / ${Math.round(latest.fat_g)}g`;
+        if (macSub) macSub.textContent = `Carbs / Fat (${latest.date})`;
+    }
+
+    const tbody = document.querySelector("#nutrition-history-table tbody");
+    if (!tbody) return;
+    tbody.innerHTML = "";
+
+    if (list.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No nutrition or hydration records found.</td></tr>`;
+        return;
+    }
+
+    list.forEach(n => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td>${n.date}</td>
+            <td><strong>${n.hydration_ml.toLocaleString()} ml</strong></td>
+            <td><strong>${n.calories_in.toLocaleString()} kcal</strong></td>
+            <td>${Math.round(n.protein_g)} g</td>
+            <td>${Math.round(n.carbs_g)} g</td>
+            <td>${Math.round(n.fat_g)} g</td>
+            <td><span class="badge badge-outline">${n.meals_logged} meals</span></td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function renderNutritionCharts(data) {
+    if (!data.nutrition_records || data.nutrition_records.length === 0) return;
+
+    const recent = [...data.nutrition_records].slice(0, 14).reverse();
+    const labels = recent.map(n => new Date(n.date).toLocaleDateString([], { month: 'short', day: 'numeric' }));
+
+    // 1. Hydration Chart
+    renderChart("chart-hydration", {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Water Intake (ml)',
+                data: recent.map(n => n.hydration_ml),
+                backgroundColor: 'rgba(56, 189, 248, 0.55)',
+                borderColor: '#38bdf8',
                 borderWidth: 2,
                 borderRadius: 4
             }]
@@ -1166,7 +2063,29 @@ function renderActivityCharts(data) {
             plugins: { legend: { labels: { color: '#94a3b8' } } },
             scales: {
                 x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } },
-                y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } }
+                y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' }, title: { display: true, text: 'ml', color: '#38bdf8' } }
+            }
+        }
+    });
+
+    // 2. Macros Chart
+    renderChart("chart-macros", {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                { label: 'Protein (g)', data: recent.map(n => n.protein_g), backgroundColor: '#34d399' },
+                { label: 'Carbs (g)', data: recent.map(n => n.carbs_g), backgroundColor: '#38bdf8' },
+                { label: 'Fat (g)', data: recent.map(n => n.fat_g), backgroundColor: '#a855f7' }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: '#94a3b8' } } },
+            scales: {
+                x: { stacked: true, grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } },
+                y: { stacked: true, grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' }, title: { display: true, text: 'Grams', color: '#94a3b8' } }
             }
         }
     });

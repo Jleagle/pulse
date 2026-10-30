@@ -52,23 +52,123 @@ type HRVRecord struct {
 
 // Activity Data Access
 type ActivityRecord struct {
-	Date           string `json:"date"`
-	Steps          int    `json:"steps"`
-	CaloriesBurned int    `json:"calories_burned"`
-	ActiveMinutes  int    `json:"active_minutes"`
+	Date           string  `json:"date"`
+	Steps          int     `json:"steps"`
+	CaloriesBurned int     `json:"calories_burned"`
+	BasalCalories  int     `json:"basal_calories"`
+	ActiveMinutes  int     `json:"active_minutes"`
+	DistanceKm     float64 `json:"distance_km"`
+	Floors         int     `json:"floors"`
+}
+
+// Heart Rate Zones & VO2 Max Data Access
+type HRZoneRecord struct {
+	Date            string `json:"date"`
+	LightMinutes    int    `json:"light_minutes"`
+	ModerateMinutes int    `json:"moderate_minutes"`
+	VigorousMinutes int    `json:"vigorous_minutes"`
+	PeakMinutes     int    `json:"peak_minutes"`
+}
+
+type VO2MaxRecord struct {
+	Date   string  `json:"date"`
+	VO2Max float64 `json:"vo2_max"`
+}
+
+// Workouts & Exercise Route Data Access
+type ExerciseSession struct {
+	ID                string  `json:"id"`
+	StartTime         string  `json:"start_time"`
+	EndTime           string  `json:"end_time"`
+	ExerciseType      string  `json:"exercise_type"`
+	DisplayName       string  `json:"display_name"`
+	DurationMinutes   int     `json:"duration_minutes"`
+	CaloriesKcal      int     `json:"calories_kcal"`
+	DistanceKm        float64 `json:"distance_km"`
+	Steps             int     `json:"steps"`
+	AvgHeartRate      int     `json:"avg_heart_rate"`
+	ActiveZoneMinutes int     `json:"active_zone_minutes"`
+	LightZoneMins     int     `json:"light_zone_mins"`
+	ModerateZoneMins  int     `json:"moderate_zone_mins"`
+	VigorousZoneMins  int     `json:"vigorous_zone_mins"`
+	PeakZoneMins      int     `json:"peak_zone_mins"`
+	HasGPS            bool    `json:"has_gps"`
+}
+
+type RoutePoint struct {
+	Timestamp      string  `json:"timestamp"`
+	ElapsedSeconds int     `json:"elapsed_seconds"`
+	Lat            float64 `json:"lat"`
+	Lng            float64 `json:"lng"`
+	AltitudeMeters float64 `json:"altitude_meters"`
+	DistanceMeters float64 `json:"distance_meters"`
+	HeartRateBpm   int     `json:"heart_rate_bpm"`
+	PaceMinPerKm   float64 `json:"pace_min_per_km,omitempty"`
+}
+
+type ExerciseRouteResponse struct {
+	ExerciseID string       `json:"exercise_id"`
+	HasRoute   bool         `json:"has_route"`
+	Points     []RoutePoint `json:"points"`
+}
+
+// Vitals & Body Data Access
+type SpO2Record struct {
+	Date       string  `json:"date"`
+	AvgPercent float64 `json:"avg_percent"`
+	MinPercent float64 `json:"min_percent"`
+	MaxPercent float64 `json:"max_percent"`
+}
+
+type RespiratoryRateRecord struct {
+	Date             string  `json:"date"`
+	BreathsPerMinute float64 `json:"breaths_per_minute"`
+}
+
+type SleepTempRecord struct {
+	Date         string  `json:"date"`
+	NightlyTempC float64 `json:"nightly_temp_c"`
+	BaselineC    float64 `json:"baseline_c"`
+	DeltaC       float64 `json:"delta_c"`
+}
+
+type BodyRecord struct {
+	Date       string   `json:"date"`
+	WeightKg   *float64 `json:"weight_kg,omitempty"`
+	BodyFatPct *float64 `json:"body_fat_pct,omitempty"`
+}
+
+// Nutrition & Hydration Data Access
+type NutritionRecord struct {
+	Date        string  `json:"date"`
+	HydrationMl int     `json:"hydration_ml"`
+	CaloriesIn  int     `json:"calories_in"`
+	ProteinG    float64 `json:"protein_g"`
+	CarbsG      float64 `json:"carbs_g"`
+	FatG        float64 `json:"fat_g"`
+	MealsLogged int     `json:"meals_logged"`
 }
 
 // Stats Response for the frontend
 type StatsResponse struct {
-	SleepSessions         []SleepSession   `json:"sleep_sessions"`
-	SleepNextPageToken    string           `json:"sleep_next_page_token,omitempty"`
-	RHRRecords            []RHRRecord      `json:"rhr_records"`
-	RHRNextPageToken      string           `json:"rhr_next_page_token,omitempty"`
-	HRVRecords            []HRVRecord      `json:"hrv_records"`
-	HRVNextPageToken      string           `json:"hrv_next_page_token,omitempty"`
-	ActivityRecords       []ActivityRecord `json:"activity_records"`
-	ActivityNextPageToken string           `json:"activity_next_page_token,omitempty"`
-	MissingScopes         []string         `json:"missing_scopes,omitempty"`
+	SleepSessions         []SleepSession          `json:"sleep_sessions"`
+	SleepNextPageToken    string                  `json:"sleep_next_page_token,omitempty"`
+	RHRRecords            []RHRRecord             `json:"rhr_records"`
+	RHRNextPageToken      string                  `json:"rhr_next_page_token,omitempty"`
+	HRVRecords            []HRVRecord             `json:"hrv_records"`
+	HRVNextPageToken      string                  `json:"hrv_next_page_token,omitempty"`
+	HRZoneRecords         []HRZoneRecord          `json:"hr_zone_records"`
+	VO2MaxRecords         []VO2MaxRecord          `json:"vo2_max_records"`
+	ActivityRecords       []ActivityRecord        `json:"activity_records"`
+	ActivityNextPageToken string                  `json:"activity_next_page_token,omitempty"`
+	ExerciseSessions      []ExerciseSession       `json:"exercise_sessions"`
+	ExerciseNextPageToken string                  `json:"exercise_next_page_token,omitempty"`
+	SpO2Records           []SpO2Record            `json:"spo2_records"`
+	RespiratoryRecords    []RespiratoryRateRecord `json:"respiratory_records"`
+	SleepTempRecords      []SleepTempRecord       `json:"sleep_temp_records"`
+	BodyRecords           []BodyRecord            `json:"body_records"`
+	NutritionRecords      []NutritionRecord       `json:"nutrition_records"`
+	MissingScopes         []string                `json:"missing_scopes,omitempty"`
 }
 
 // Status Response for the frontend
@@ -80,19 +180,6 @@ type StatusResponse struct {
 	UserPicture      string `json:"user_picture"`
 	RedirectURI      string `json:"redirect_uri"`
 	ClientIDMasked   string `json:"client_id_masked"`
-}
-
-// Config Request and Response for self-hosted UI setup
-type ConfigRequest struct {
-	ClientID     string `json:"client_id"`
-	ClientSecret string `json:"client_secret"`
-	RedirectURI  string `json:"redirect_uri,omitempty"`
-}
-
-type ConfigResponse struct {
-	Status      string `json:"status"`
-	Message     string `json:"message"`
-	RedirectURI string `json:"redirect_uri"`
 }
 
 // User Profile info from Google OAuth

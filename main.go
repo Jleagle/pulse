@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"log"
 	"net/http"
@@ -8,27 +9,24 @@ import (
 )
 
 func main() {
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
+	port := cmp.Or(os.Getenv("PORT"), os.Getenv("PULSE_PORT"), "8080")
+	clientID := cmp.Or(os.Getenv("CLIENT_ID"), os.Getenv("PULSE_CLIENT_ID"))
+	clientSecret := cmp.Or(os.Getenv("CLIENT_SECRET"), os.Getenv("PULSE_CLIENT_SECRET"))
+	redirectURL := cmp.Or(
+		os.Getenv("REDIRECT_URL"),
+		os.Getenv("PULSE_REDIRECT_URL"),
+		fmt.Sprintf("http://localhost:%s/oauth/callback", port),
+	)
 
-	clientID := os.Getenv("CLIENT_ID")
-	clientSecret := os.Getenv("CLIENT_SECRET")
-	redirectURL := os.Getenv("REDIRECT_URL")
-	if redirectURL == "" {
-		redirectURL = fmt.Sprintf("http://localhost:%s/oauth/callback", port)
-	}
-
-	// 1. Initialize Stateless Service (auto-loads config.json if present)
+	// 1. Initialize Stateless Service from environment variables
 	service := NewStatelessService(clientID, clientSecret, redirectURL)
 
-	cID, _, _ := service.GetCredentials()
-	if cID == "" {
-		log.Println("[INFO] ⚙️  No OAuth Client credentials in environment or config.json.")
-		log.Println("[INFO] 👉 Open the Web UI in your browser to configure Self-Hosted Google OAuth keys directly!")
+	cID, cSec, _ := service.GetCredentials()
+	if cID == "" || cSec == "" {
+		log.Println("[WARNING] ⚠️  CLIENT_ID or CLIENT_SECRET environment variables are not set.")
+		log.Println("[WARNING] 👉 Set CLIENT_ID and CLIENT_SECRET in your environment to enable Google OAuth login.")
 	} else {
-		log.Println("[INFO] ✅ Google OAuth Client credentials loaded and active.")
+		log.Println("[INFO] ✅ Google OAuth Client credentials loaded from environment.")
 	}
 
 	// 2. Initialize HTTP Server with routes
