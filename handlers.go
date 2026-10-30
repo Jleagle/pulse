@@ -45,6 +45,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /oauth/callback", s.handleOAuthCallback)
 	mux.HandleFunc("POST /api/logout", s.handleLogout)
 	mux.HandleFunc("GET /api/logout", s.handleLogout)
+	mux.HandleFunc("POST /api/cache/clear", s.handleClearCache)
 	mux.HandleFunc("GET /api/stats", s.handleStats)
 	mux.HandleFunc("GET /api/exercise-route", s.handleExerciseRoute)
 
@@ -256,6 +257,7 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	s.service.ClearCache()
 	ClearSessionCookie(w, r)
 	if r.Method == http.MethodGet {
 		http.Redirect(w, r, "/", http.StatusFound)
@@ -265,7 +267,17 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
+func (s *Server) handleClearCache(w http.ResponseWriter, r *http.Request) {
+	s.service.ClearCache()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("refresh") == "true" {
+		s.service.ClearCache()
+	}
+
 	token, err := GetSessionCookie(r)
 	if err != nil || token == nil {
 		http.Error(w, "Unauthorized: Not connected to Google Health", http.StatusUnauthorized)

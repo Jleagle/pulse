@@ -460,8 +460,9 @@ async function triggerRefresh() {
     if (btnSettings) btnSettings.disabled = true;
 
     try {
+        await fetch("/api/cache/clear", { method: "POST" }).catch(() => {});
         resetAppData();
-        showToast("Browser cache cleared! Health data will lazy load when you visit each tab.");
+        showToast("Server & browser cache cleared! Health data will lazy load when you visit each tab.");
     } catch (e) {
         showToast("Failed to clear cache", true);
     } finally {

@@ -265,6 +265,18 @@ type ListDataPointsResponse struct {
 	NextPageToken string      `json:"nextPageToken"`
 }
 
+const ServerCacheTTL = 6 * time.Hour
+
+type cachedStatsEntry struct {
+	resp     *StatsResponse
+	cachedAt time.Time
+}
+
+type cachedRouteEntry struct {
+	resp     *ExerciseRouteResponse
+	cachedAt time.Time
+}
+
 type StatelessService struct {
 	clientID     string
 	clientSecret string
@@ -273,6 +285,9 @@ type StatelessService struct {
 	backoffUntil time.Time
 	tokenMu      sync.Mutex
 	latestTokens map[string]*oauth2.Token
+	cacheMu      sync.RWMutex
+	statsCache   map[string]cachedStatsEntry
+	routeCache   map[string]cachedRouteEntry
 }
 
 func NewStatelessService(clientID, clientSecret, redirectURI string) *StatelessService {
@@ -282,7 +297,16 @@ func NewStatelessService(clientID, clientSecret, redirectURI string) *StatelessS
 		clientSecret: strings.TrimSpace(clientSecret),
 		redirectURI:  strings.TrimSpace(redirectURI),
 		latestTokens: make(map[string]*oauth2.Token),
+		statsCache:   make(map[string]cachedStatsEntry),
+		routeCache:   make(map[string]cachedRouteEntry),
 	}
+}
+
+func (s *StatelessService) ClearCache() {
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	s.statsCache = make(map[string]cachedStatsEntry)
+	s.routeCache = make(map[string]cachedRouteEntry)
 }
 
 func (s *StatelessService) GetCredentials() (string, string, string) {
@@ -419,6 +443,14 @@ func (s *StatelessService) FetchUserProfile(client *http.Client) (*UserProfile, 
 
 // Fetch health metrics concurrently and return stateless response
 func (s *StatelessService) FetchAllStats(client *http.Client, days int, metric, pageToken string) (*StatsResponse, error) {
+	cacheKey := fmt.Sprintf("%d:%s:%s", days, metric, pageToken)
+	s.cacheMu.RLock()
+	if entry, ok := s.statsCache[cacheKey]; ok && time.Since(entry.cachedAt) < ServerCacheTTL {
+		s.cacheMu.RUnlock()
+		return entry.resp, nil
+	}
+	s.cacheMu.RUnlock()
+
 	startTime := time.Now().UTC().AddDate(0, 0, -days)
 	startTimeRFC := startTime.Format(time.RFC3339)
 	startDateStr := startTime.Format("2006-01-02")
@@ -698,6 +730,15 @@ func (s *StatelessService) FetchAllStats(client *http.Client, days int, metric, 
 	sort.Slice(resp.NutritionRecords, func(i, j int) bool {
 		return resp.NutritionRecords[i].Date > resp.NutritionRecords[j].Date
 	})
+
+	if len(resp.MissingScopes) == 0 {
+		s.cacheMu.Lock()
+		s.statsCache[cacheKey] = cachedStatsEntry{
+			resp:     resp,
+			cachedAt: time.Now(),
+		}
+		s.cacheMu.Unlock()
+	}
 
 	return resp, nil
 }
@@ -1430,6 +1471,13 @@ func haversineMeters(lat1, lon1, lat2, lon2 float64) float64 {
 
 // FetchExerciseRoute downloads and parses the TCX GPS coordinate stream for an exercise session
 func (s *StatelessService) FetchExerciseRoute(client *http.Client, exerciseID string) (*ExerciseRouteResponse, error) {
+	s.cacheMu.RLock()
+	if entry, ok := s.routeCache[exerciseID]; ok && time.Since(entry.cachedAt) < ServerCacheTTL {
+		s.cacheMu.RUnlock()
+		return entry.resp, nil
+	}
+	s.cacheMu.RUnlock()
+
 	urlStr := fmt.Sprintf("https://health.googleapis.com/v4/users/me/dataTypes/exercise/dataPoints/%s:exportExerciseTcx?alt=media", url.PathEscape(exerciseID))
 	resp, err := s.getWithRateLimit(client, urlStr)
 	if err != nil {
@@ -1521,11 +1569,19 @@ func (s *StatelessService) FetchExerciseRoute(client *http.Client, exerciseID st
 		})
 	}
 
-	return &ExerciseRouteResponse{
+	routeResp := &ExerciseRouteResponse{
 		ExerciseID: exerciseID,
 		HasRoute:   len(points) > 0,
 		Points:     points,
-	}, nil
+	}
+	s.cacheMu.Lock()
+	s.routeCache[exerciseID] = cachedRouteEntry{
+		resp:     routeResp,
+		cachedAt: time.Now(),
+	}
+	s.cacheMu.Unlock()
+
+	return routeResp, nil
 }
 
 func (s *StatelessService) fetchVitalsAndBody(client *http.Client, startDateStr string) ([]SpO2Record, []RespiratoryRateRecord, []SleepTempRecord, []BodyRecord, error) {
