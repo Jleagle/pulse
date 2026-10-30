@@ -7,6 +7,20 @@ let appStatus = {
     user_picture: ""
 };
 let currentHorizonDays = 3650; // Query maximum allowed history by default
+let chartRangeDays = 14; // Default chart window in days
+
+function setChartRange(days) {
+    chartRangeDays = days;
+    document.querySelectorAll("#horizon-selector .btn-horizon").forEach(btn => {
+        btn.classList.toggle("active", Number(btn.getAttribute("data-days")) === days);
+    });
+    if (appData.overview_loaded) renderOverviewCharts(appData);
+    if (appData.sleep_loaded) renderSleepCharts({ sleep_sessions: appData.sleep_sessions });
+    if (appData.heart_loaded) renderHeartCharts(appData);
+    if (appData.activity_loaded) renderActivityCharts({ activity_records: appData.activity_records });
+    if (appData.vitals_loaded) renderVitalsCharts(appData);
+    if (appData.nutrition_loaded) renderNutritionCharts(appData);
+}
 
 let appData = {
     overview_loaded: false,
@@ -1283,7 +1297,7 @@ function renderChart(canvasId, config) {
 function renderOverviewCharts(data) {
     // 1. Sleep Duration Trend on Overview
     if (data.sleep_sessions && data.sleep_sessions.length > 0) {
-        const recentSleeps = [...data.sleep_sessions].slice(0, 14).reverse();
+        const recentSleeps = [...data.sleep_sessions].slice(0, chartRangeDays).reverse();
         const dates = recentSleeps.map(s => new Date(s.start_time).toLocaleDateString([], { month: 'short', day: 'numeric' }));
         renderChart("chart-overview-sleep", {
             type: 'line',
@@ -1332,7 +1346,7 @@ function renderOverviewCharts(data) {
         const dates = Array.from(new Set([
             ...(data.rhr_records || []).map(r => r.date),
             ...(data.hrv_records || []).map(r => r.date)
-        ])).sort().slice(-14);
+        ])).sort().slice(-chartRangeDays);
 
         const labels = dates.map(d => new Date(d).toLocaleDateString([], { month: 'short', day: 'numeric' }));
         const rhrPoints = dates.map(d => rhrMap[d] || null);
@@ -1388,8 +1402,8 @@ function renderOverviewCharts(data) {
 function renderSleepCharts(data) {
     if (!data.sleep_sessions || data.sleep_sessions.length === 0) return;
 
-    // Limit to last 14 nights, ordered oldest to newest for chronological trend
-    const recentSleeps = [...data.sleep_sessions].slice(0, 14).reverse();
+    // Limit to selected range of nights, ordered oldest to newest for chronological trend
+    const recentSleeps = [...data.sleep_sessions].slice(0, chartRangeDays).reverse();
     const dates = recentSleeps.map(s => new Date(s.start_time).toLocaleDateString([], { month: 'short', day: 'numeric' }));
     
     // Chart 1: Sleep Durations Trend (Asleep vs Awake)
@@ -1486,7 +1500,7 @@ function renderHeartCharts(data) {
 
     // 1. HRV Chart
     if (data.hrv_records && data.hrv_records.length > 0) {
-        const hrvDates = [...data.hrv_records].slice(0, 14).reverse();
+        const hrvDates = [...data.hrv_records].slice(0, chartRangeDays).reverse();
         renderChart("chart-hrv", {
             type: 'line',
             data: {
@@ -1516,7 +1530,7 @@ function renderHeartCharts(data) {
 
     // 2. RHR Chart
     if (data.rhr_records && data.rhr_records.length > 0) {
-        const rhrDates = [...data.rhr_records].slice(0, 14).reverse();
+        const rhrDates = [...data.rhr_records].slice(0, chartRangeDays).reverse();
         renderChart("chart-rhr", {
             type: 'line',
             data: {
@@ -1546,7 +1560,7 @@ function renderHeartCharts(data) {
 
     // 3. Daily Heart Rate Zones Chart
     if (data.hr_zone_records && data.hr_zone_records.length > 0) {
-        const zDates = [...data.hr_zone_records].slice(0, 14).reverse();
+        const zDates = [...data.hr_zone_records].slice(0, chartRangeDays).reverse();
         const labels = zDates.map(z => new Date(z.date).toLocaleDateString([], { month: 'short', day: 'numeric' }));
         renderChart("chart-hr-zones", {
             type: 'bar',
@@ -1573,7 +1587,7 @@ function renderHeartCharts(data) {
 
     // 4. VO2 Max Chart
     if (data.vo2_max_records && data.vo2_max_records.length > 0) {
-        const vDates = [...data.vo2_max_records].slice(0, 14).reverse();
+        const vDates = [...data.vo2_max_records].slice(0, chartRangeDays).reverse();
         renderChart("chart-vo2-max", {
             type: 'line',
             data: {
@@ -1605,7 +1619,7 @@ function renderHeartCharts(data) {
 function renderActivityCharts(data) {
     if (!data.activity_records || data.activity_records.length === 0) return;
 
-    const recentAct = [...data.activity_records].slice(0, 14).reverse();
+    const recentAct = [...data.activity_records].slice(0, chartRangeDays).reverse();
     const dates = recentAct.map(a => new Date(a.date).toLocaleDateString([], { month: 'short', day: 'numeric' }));
 
     // Chart 1: Steps Trend
@@ -2278,7 +2292,7 @@ function populateVitalsTab(data) {
 function renderVitalsCharts(data) {
     // 1. SpO2 Chart
     if (data.spo2_records && data.spo2_records.length > 0) {
-        const recent = [...data.spo2_records].slice(0, 14).reverse();
+        const recent = [...data.spo2_records].slice(0, chartRangeDays).reverse();
         const labels = recent.map(r => new Date(r.date).toLocaleDateString([], { month: 'short', day: 'numeric' }));
         renderChart("chart-spo2", {
             type: 'line',
@@ -2319,7 +2333,7 @@ function renderVitalsCharts(data) {
 
     // 2. Respiratory Rate Chart
     if (data.respiratory_records && data.respiratory_records.length > 0) {
-        const recent = [...data.respiratory_records].slice(0, 14).reverse();
+        const recent = [...data.respiratory_records].slice(0, chartRangeDays).reverse();
         renderChart("chart-respiratory", {
             type: 'line',
             data: {
@@ -2349,7 +2363,7 @@ function renderVitalsCharts(data) {
 
     // 3. Skin Temp Chart
     if (data.sleep_temp_records && data.sleep_temp_records.length > 0) {
-        const recent = [...data.sleep_temp_records].slice(0, 14).reverse();
+        const recent = [...data.sleep_temp_records].slice(0, chartRangeDays).reverse();
         renderChart("chart-skin-temp", {
             type: 'bar',
             data: {
@@ -2375,7 +2389,7 @@ function renderVitalsCharts(data) {
 
     // 4. Body Composition Chart
     if (data.body_records && data.body_records.length > 0) {
-        const recent = [...data.body_records].slice(0, 14).reverse();
+        const recent = [...data.body_records].slice(0, chartRangeDays).reverse();
         const labels = recent.map(r => new Date(r.date).toLocaleDateString([], { month: 'short', day: 'numeric' }));
         renderChart("chart-body-comp", {
             type: 'line',
@@ -2470,7 +2484,7 @@ function populateNutritionTab(records) {
 function renderNutritionCharts(data) {
     if (!data.nutrition_records || data.nutrition_records.length === 0) return;
 
-    const recent = [...data.nutrition_records].slice(0, 14).reverse();
+    const recent = [...data.nutrition_records].slice(0, chartRangeDays).reverse();
     const labels = recent.map(n => new Date(n.date).toLocaleDateString([], { month: 'short', day: 'numeric' }));
 
     // 1. Hydration Chart

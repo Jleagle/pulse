@@ -82,10 +82,19 @@
                 <div class="header-title">
                     <h1 id="page-title">Dashboard Overview</h1>
                 </div>
-                <div class="user-badge" id="user-badge-container" onclick="switchTab('settings')" title="Click to open Settings & login" style="cursor: pointer;">
-                    <img id="avatar-img" class="avatar-img" referrerpolicy="no-referrer" alt="Avatar" style="display: none; width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid var(--color-purple);">
-                    <div class="avatar" id="avatar-badge">G</div>
-                    <span id="user-name">Guest</span>
+                <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+                    <div id="horizon-selector" style="display: flex; gap: 6px;">
+                        <button class="btn-horizon" data-days="7" onclick="setChartRange(7)">7D</button>
+                        <button class="btn-horizon active" data-days="14" onclick="setChartRange(14)">14D</button>
+                        <button class="btn-horizon" data-days="30" onclick="setChartRange(30)">30D</button>
+                        <button class="btn-horizon" data-days="90" onclick="setChartRange(90)">90D</button>
+                        <button class="btn-horizon" data-days="365" onclick="setChartRange(365)">1Y</button>
+                    </div>
+                    <div class="user-badge" id="user-badge-container" onclick="switchTab('settings')" title="Click to open Settings & login" style="cursor: pointer;">
+                        <img id="avatar-img" class="avatar-img" referrerpolicy="no-referrer" alt="Avatar" style="display: none; width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid var(--color-purple);">
+                        <div class="avatar" id="avatar-badge">G</div>
+                        <span id="user-name">Guest</span>
+                    </div>
                 </div>
             </header>
 
