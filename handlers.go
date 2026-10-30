@@ -52,7 +52,7 @@ func (s *Server) Routes() http.Handler {
 	}
 
 	// SPA tab routing so page refreshes and links work cleanly
-	for _, tab := range []string{"overview", "sleep", "heart", "activity", "workouts", "vitals", "nutrition", "settings", "setup-guide", "privacy-policy", "terms-of-service"} {
+	for _, tab := range []string{"overview", "sleep", "heart", "activity", "workouts", "vitals", "nutrition", "settings", "privacy-policy", "terms-of-service"} {
 		tabName := tab
 		mux.HandleFunc("GET /"+tabName, func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")

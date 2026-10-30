@@ -389,17 +389,31 @@ body {
     flex-direction: column;
 }
 
-.panel-header h3 {
+.chart-header,
+.table-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.panel-header h3,
+.chart-header h3,
+.table-header h3 {
     font-family: 'Outfit', sans-serif;
     font-weight: 600;
     font-size: 1.25rem;
     color: #ffffff;
+    margin: 0;
 }
 
-.panel-subtitle {
+.panel-subtitle,
+.chart-subtitle,
+.table-subtitle {
     font-size: 0.85rem;
     color: var(--text-secondary);
-    margin-top: 4px;
+    margin: 4px 0 0;
 }
 
 .chart-container {
@@ -452,7 +466,8 @@ body {
     gap: 16px;
 }
 
-.table-container {
+.table-container,
+.table-responsive {
     overflow-x: auto;
     max-height: 400px;
 }
@@ -1285,6 +1300,7 @@ body {
 }
 
 
+
 /* ==========================================
    LEGAL & DOCUMENTATION PAGES STYLING
    ========================================== */
@@ -1673,4 +1689,54 @@ body {
         padding: 24px;
     }
 }
+
+/* MapLibre GL + OpenFreeMap Dark UI Overrides */
+.maplibregl-popup-content {
+    background: rgba(15, 23, 42, 0.95) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border-color);
+    border-radius: 10px !important;
+    padding: 10px 14px !important;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 0.82rem;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45) !important;
+}
+
+.maplibregl-popup-anchor-bottom .maplibregl-popup-tip {
+    border-top-color: rgba(15, 23, 42, 0.95) !important;
+}
+
+.maplibregl-popup-anchor-top .maplibregl-popup-tip {
+    border-bottom-color: rgba(15, 23, 42, 0.95) !important;
+}
+
+.maplibregl-popup-close-button {
+    color: var(--text-secondary) !important;
+    padding: 2px 6px !important;
+}
+
+.maplibregl-ctrl-group {
+    background: rgba(15, 23, 42, 0.88) !important;
+    border: 1px solid var(--border-color) !important;
+    backdrop-filter: blur(8px);
+}
+
+.maplibregl-ctrl-group button + button {
+    border-top: 1px solid var(--border-color) !important;
+}
+
+.maplibregl-ctrl-icon {
+    filter: invert(1) brightness(0.85);
+}
+
+.maplibregl-ctrl-attrib {
+    background: rgba(15, 23, 42, 0.75) !important;
+    color: var(--text-muted) !important;
+    font-size: 0.7rem !important;
+}
+
+.maplibregl-ctrl-attrib a {
+    color: var(--text-secondary) !important;
+}
+
 

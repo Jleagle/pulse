@@ -47,7 +47,9 @@ let appData = {
 };
 
 let workoutMap = null;
-let workoutRouteLayer = null;
+let workoutMapLoaded = false;
+let pendingRouteRender = null;
+let workoutMarkers = [];
 let selectedExerciseId = "";
 
 function resetAppData() {
@@ -165,7 +167,7 @@ function loadCache() {
 // Global chart references for disposal
 const activeCharts = {};
 
-const VALID_TABS = ["overview", "workouts", "sleep", "heart", "activity", "vitals", "nutrition", "settings", "setup-guide", "privacy-policy", "terms-of-service"];
+const VALID_TABS = ["overview", "workouts", "sleep", "heart", "activity", "vitals", "nutrition", "settings", "privacy-policy", "terms-of-service"];
 
 // Handle browser back/forward buttons
 window.addEventListener("popstate", () => {
@@ -240,7 +242,6 @@ function switchTab(tabId, updateUrl = true) {
         vitals: "Vitals & Body Composition",
         nutrition: "Nutrition & Hydration",
         settings: "Application Settings",
-        "setup-guide": "Self-Host Setup Guide",
         "privacy-policy": "Privacy Policy",
         "terms-of-service": "Terms of Service"
     };
@@ -271,7 +272,7 @@ function switchTab(tabId, updateUrl = true) {
     } else if (tabId === "workouts") {
         setTimeout(() => {
             initWorkoutMap();
-            if (workoutMap) workoutMap.invalidateSize();
+            if (workoutMap) workoutMap.resize();
         }, 50);
         if (!appData.workouts_loaded && !appData.workouts_loading) loadMetric("workouts");
         else if (appData.workouts_loading) showLoadingSpinner("workouts");
@@ -311,7 +312,6 @@ async function refreshStatus() {
         const authIcon = document.getElementById("auth-status-icon");
         const authTitle = document.getElementById("auth-status-title");
         const authDesc = document.getElementById("auth-status-desc");
-        const oauthConfigStatus = document.getElementById("oauth-config-status");
         
         const btnGoogle = document.getElementById("btn-google-connect");
         const btnForceSync = document.getElementById("btn-force-sync");
@@ -321,15 +321,6 @@ async function refreshStatus() {
         const userNameEl = document.getElementById("user-name");
         const avatarImg = document.getElementById("avatar-img");
         const avatarBadge = document.getElementById("avatar-badge");
-
-        if (oauthConfigStatus) {
-            oauthConfigStatus.textContent = appStatus.client_configured ? "✅ Active (BYOK Configured)" : "⚠️ Missing Host Credentials";
-            oauthConfigStatus.style.color = appStatus.client_configured ? "var(--color-emerald)" : "var(--color-rose)";
-            oauthConfigStatus.style.background = appStatus.client_configured ? "rgba(52, 211, 153, 0.15)" : "rgba(244, 63, 94, 0.15)";
-        }
-
-        const guideRedirectUri = document.getElementById("guide-redirect-uri");
-        if (guideRedirectUri && appStatus.redirect_uri) guideRedirectUri.value = appStatus.redirect_uri;
 
         if (appStatus.oauth_connected) {
             authIcon.className = "success-icon";
@@ -397,15 +388,6 @@ async function redirectToGoogle(scope = '') {
     } catch (e) {
         showToast("Cannot connect: Server OAuth credentials (CLIENT_ID / CLIENT_SECRET environment variables) are not set.", true);
     }
-}
-
-function copyRedirectURI() {
-    const uri = (appStatus && appStatus.redirect_uri) || document.getElementById("guide-redirect-uri")?.value || window.location.origin + "/oauth/callback";
-    navigator.clipboard.writeText(uri).then(() => {
-        showToast("Redirect URI copied to clipboard!");
-    }).catch(() => {
-        showToast("Failed to copy URI, please copy manually: " + uri, true);
-    });
 }
 
 // Sign Out & Revoke Session
@@ -482,13 +464,13 @@ async function loadStats(forceRefresh = false) {
             renderNutritionCharts(appData);
         }
 
-        if (!["overview", "settings", "setup-guide", "privacy-policy", "terms-of-service"].includes(activeTabId) && !appData[`${activeTabId}_loaded`]) {
+        if (!["overview", "settings", "privacy-policy", "terms-of-service"].includes(activeTabId) && !appData[`${activeTabId}_loaded`]) {
             await loadMetric(activeTabId);
         }
         return;
     }
 
-    if (!["settings", "setup-guide", "privacy-policy", "terms-of-service"].includes(activeTabId)) {
+    if (!["settings", "privacy-policy", "terms-of-service"].includes(activeTabId)) {
         await loadMetric(activeTabId);
     } else {
         await loadMetric("overview");
@@ -1448,22 +1430,66 @@ function renderActivityCharts(data) {
 
 function initWorkoutMap() {
     const mapContainer = document.getElementById("workout-route-map");
-    if (!mapContainer || typeof L === "undefined") return;
+    if (!mapContainer || typeof maplibregl === "undefined") return;
     if (workoutMap) return;
 
-    workoutMap = L.map("workout-route-map", {
-        zoomControl: true,
+    workoutMap = new maplibregl.Map({
+        container: "workout-route-map",
+        style: "https://tiles.openfreemap.org/styles/dark",
+        center: [-0.1657, 51.5073],
+        zoom: 12.5,
         attributionControl: true
-    }).setView([51.5073, -0.1657], 13);
+    });
 
-    // Dark-mode CartoDB Matter map tiles matching Pulse's dark glass UI
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
-        subdomains: "abcd",
-        maxZoom: 19
-    }).addTo(workoutMap);
+    workoutMap.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: true }), "top-right");
 
-    workoutRouteLayer = L.layerGroup().addTo(workoutMap);
+    workoutMap.on("load", () => {
+        workoutMapLoaded = true;
+
+        workoutMap.addSource("workout-route", {
+            type: "geojson",
+            data: { type: "FeatureCollection", features: [] }
+        });
+
+        // Outer neon glow layer
+        workoutMap.addLayer({
+            id: "workout-route-glow",
+            type: "line",
+            source: "workout-route",
+            layout: {
+                "line-cap": "round",
+                "line-join": "round"
+            },
+            paint: {
+                "line-color": "#f97316",
+                "line-width": 10,
+                "line-opacity": 0.28,
+                "line-blur": 3
+            }
+        });
+
+        // Core GPS track line layer
+        workoutMap.addLayer({
+            id: "workout-route-core",
+            type: "line",
+            source: "workout-route",
+            layout: {
+                "line-cap": "round",
+                "line-join": "round"
+            },
+            paint: {
+                "line-color": "#fb923c",
+                "line-width": 4,
+                "line-opacity": 0.95
+            }
+        });
+
+        if (pendingRouteRender) {
+            const { workout, routeData } = pendingRouteRender;
+            pendingRouteRender = null;
+            renderWorkoutRouteOnMap(workout, routeData);
+        }
+    });
 }
 
 function formatPace(durationMins, distKm) {
@@ -1604,7 +1630,7 @@ async function selectWorkoutRoute(workout) {
     }
 
     initWorkoutMap();
-    if (workoutMap) workoutMap.invalidateSize();
+    if (workoutMap) workoutMap.resize();
 
     try {
         const res = await fetch(`/api/exercise-route?id=${encodeURIComponent(workout.id)}`);
@@ -1627,55 +1653,75 @@ async function selectWorkoutRoute(workout) {
     }
 }
 
-function renderWorkoutRouteOnMap(workout, routeData) {
-    if (!workoutMap || !workoutRouteLayer) return;
-    workoutRouteLayer.clearLayers();
+function createRouteMarkerElement(color) {
+    const el = document.createElement("div");
+    el.style.width = "14px";
+    el.style.height = "14px";
+    el.style.borderRadius = "50%";
+    el.style.backgroundColor = color;
+    el.style.border = "2px solid #0f172a";
+    el.style.boxShadow = `0 0 8px ${color}`;
+    el.style.cursor = "pointer";
+    return el;
+}
 
-    if (!routeData || !routeData.has_route || !routeData.points || routeData.points.length === 0) {
+function renderWorkoutRouteOnMap(workout, routeData) {
+    if (!workoutMap) return;
+    if (!workoutMapLoaded) {
+        pendingRouteRender = { workout, routeData };
         return;
     }
 
-    const latlngs = routeData.points.map(p => [p.lat, p.lng]);
+    // Clear previous markers
+    workoutMarkers.forEach(m => m.remove());
+    workoutMarkers = [];
 
-    // Outer glow line (Strava orange/emerald neon glow)
-    L.polyline(latlngs, {
-        color: "#f97316",
-        weight: 9,
-        opacity: 0.25,
-        lineCap: "round",
-        lineJoin: "round"
-    }).addTo(workoutRouteLayer);
+    const routeSource = workoutMap.getSource("workout-route");
+    if (!routeData || !routeData.has_route || !routeData.points || routeData.points.length === 0) {
+        if (routeSource) {
+            routeSource.setData({ type: "FeatureCollection", features: [] });
+        }
+        return;
+    }
 
-    // Core route polyline
-    const routeLine = L.polyline(latlngs, {
-        color: "#fb923c",
-        weight: 4,
-        opacity: 0.95,
-        lineCap: "round",
-        lineJoin: "round"
-    }).addTo(workoutRouteLayer);
+    const coordinates = routeData.points.map(p => [p.lng, p.lat]);
+
+    if (routeSource) {
+        routeSource.setData({
+            type: "Feature",
+            properties: {},
+            geometry: {
+                type: "LineString",
+                coordinates: coordinates
+            }
+        });
+    }
 
     // Start Marker (Green)
     const startPt = routeData.points[0];
-    L.circleMarker([startPt.lat, startPt.lng], {
-        radius: 7,
-        fillColor: "#34d399",
-        color: "#0f172a",
-        weight: 2,
-        fillOpacity: 1
-    }).bindPopup(`<strong>Start: ${workout.display_name}</strong><br>HR: ${startPt.heart_rate_bpm || '--'} BPM`).addTo(workoutRouteLayer);
+    const startPopup = new maplibregl.Popup({ offset: 10 }).setHTML(
+        `<strong>Start: ${workout.display_name}</strong><br>HR: ${startPt.heart_rate_bpm || '--'} BPM`
+    );
+    const startMarker = new maplibregl.Marker({ element: createRouteMarkerElement("#34d399") })
+        .setLngLat([startPt.lng, startPt.lat])
+        .setPopup(startPopup)
+        .addTo(workoutMap);
+    workoutMarkers.push(startMarker);
 
     // Finish Marker (Rose/Red)
     const endPt = routeData.points[routeData.points.length - 1];
-    L.circleMarker([endPt.lat, endPt.lng], {
-        radius: 7,
-        fillColor: "#f43f5e",
-        color: "#0f172a",
-        weight: 2,
-        fillOpacity: 1
-    }).bindPopup(`<strong>Finish</strong><br>Distance: ${(endPt.distance_meters / 1000).toFixed(2)} km<br>Final HR: ${endPt.heart_rate_bpm || '--'} BPM`).addTo(workoutRouteLayer);
+    const endPopup = new maplibregl.Popup({ offset: 10 }).setHTML(
+        `<strong>Finish</strong><br>Distance: ${(endPt.distance_meters / 1000).toFixed(2)} km<br>Final HR: ${endPt.heart_rate_bpm || '--'} BPM`
+    );
+    const endMarker = new maplibregl.Marker({ element: createRouteMarkerElement("#f43f5e") })
+        .setLngLat([endPt.lng, endPt.lat])
+        .setPopup(endPopup)
+        .addTo(workoutMap);
+    workoutMarkers.push(endMarker);
 
-    workoutMap.fitBounds(routeLine.getBounds(), { padding: [28, 28] });
+    const bounds = new maplibregl.LngLatBounds();
+    coordinates.forEach(coord => bounds.extend(coord));
+    workoutMap.fitBounds(bounds, { padding: 36, maxZoom: 16, duration: 600 });
 }
 
 function renderWorkoutProfileChart(workout, routeData) {
