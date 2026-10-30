@@ -2,6 +2,7 @@
 let appStatus = {
     client_configured: false,
     oauth_connected: false,
+    redirect_uri: "",
     user_email: "",
     user_name: "",
     user_picture: ""
@@ -366,6 +367,21 @@ async function refreshStatus() {
         const userNameEl = document.getElementById("user-name");
         const avatarImg = document.getElementById("avatar-img");
         const avatarBadge = document.getElementById("avatar-badge");
+        const redirectUriEl = document.getElementById("settings-redirect-uri");
+        const clientConfigEl = document.getElementById("settings-client-config-status");
+
+        if (redirectUriEl && appStatus.redirect_uri) {
+            redirectUriEl.textContent = appStatus.redirect_uri;
+        }
+        if (clientConfigEl) {
+            if (appStatus.client_configured) {
+                clientConfigEl.textContent = "Configured on server";
+                clientConfigEl.style.color = "var(--accent-emerald)";
+            } else {
+                clientConfigEl.textContent = "Missing — set CLIENT_ID and CLIENT_SECRET in .env or environment";
+                clientConfigEl.style.color = "var(--accent-rose)";
+            }
+        }
 
         if (appStatus.oauth_connected) {
             authIcon.className = "success-icon";
@@ -424,6 +440,20 @@ async function refreshStatus() {
     }
 }
 
+
+function copyRedirectUri() {
+    const uri = appStatus.redirect_uri || (document.getElementById("settings-redirect-uri")?.textContent || "").trim();
+    if (!uri) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(uri).then(() => {
+            showToast("Copied Redirect URI to clipboard!");
+        }).catch(() => {
+            showToast("Failed to copy URI", true);
+        });
+    } else {
+        showToast("Redirect URI: " + uri);
+    }
+}
 
 // Redirect User to Google Consent screen (supports incremental scope authorization)
 async function redirectToGoogle(scope = '') {

@@ -182,6 +182,7 @@ type StatsResponse struct {
 type StatusResponse struct {
 	ClientConfigured bool   `json:"client_configured"`
 	OAuthConnected   bool   `json:"oauth_connected"`
+	RedirectURI      string `json:"redirect_uri"`
 	UserEmail        string `json:"user_email"`
 	UserName         string `json:"user_name"`
 	UserPicture      string `json:"user_picture"`

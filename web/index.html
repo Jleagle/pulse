@@ -794,6 +794,28 @@
                             </button>
                         </div>
 
+                        <div class="danger-zone-box" style="margin-bottom: 1.5rem;">
+                            <h4>Self-Hosted OAuth Configuration</h4>
+                            <p class="panel-subtitle">Use the detected callback URI below in your Google Cloud Console OAuth 2.0 Client ID settings.</p>
+
+                            <div class="control-row">
+                                <div class="control-desc">
+                                    <strong>Server Credentials (CLIENT_ID / CLIENT_SECRET)</strong>
+                                    <span id="settings-client-config-status">Checking server configuration...</span>
+                                </div>
+                            </div>
+
+                            <div class="control-row border-top">
+                                <div class="control-desc">
+                                    <strong>Authorized Redirect URI</strong>
+                                    <code id="settings-redirect-uri" style="display: inline-block; margin-top: 0.25rem; padding: 0.25rem 0.5rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-glass); border-radius: 6px; font-size: 0.82rem; color: var(--accent-blue); user-select: all;">http://localhost:8080/oauth/callback</code>
+                                </div>
+                                <button class="btn btn-secondary" onclick="copyRedirectUri()">
+                                    <i data-lucide="copy"></i> Copy URI
+                                </button>
+                            </div>
+                        </div>
+
                         <div class="danger-zone-box">
                             <h4>Session Management</h4>
                             <p class="panel-subtitle">Manage your active browser session cookie.</p>

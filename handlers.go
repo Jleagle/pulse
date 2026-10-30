@@ -162,6 +162,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	resp := StatusResponse{
 		ClientConfigured: clientConfigured,
 		OAuthConnected:   oauthConnected,
+		RedirectURI:      s.effectiveRedirectURI(r),
 		UserEmail:        userEmail,
 		UserName:         userName,
 		UserPicture:      userPic,
