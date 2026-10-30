@@ -274,6 +274,7 @@ type StatelessService struct {
 }
 
 func NewStatelessService(clientID, clientSecret, redirectURI string) *StatelessService {
+	SetCookieEncryptionKey(clientSecret)
 	return &StatelessService{
 		clientID:     strings.TrimSpace(clientID),
 		clientSecret: strings.TrimSpace(clientSecret),

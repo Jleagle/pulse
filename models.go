@@ -1,11 +1,17 @@
 package main
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -188,13 +194,90 @@ type UserProfile struct {
 }
 
 // Cookie Session Helpers
+var (
+	cookieKeyMu sync.RWMutex
+	cookieKey   = func() []byte {
+		b := make([]byte, 32)
+		_, _ = io.ReadFull(rand.Reader, b)
+		return b
+	}()
+)
+
+// SetCookieEncryptionKey derives a 32-byte AES-256 key from the configured secret.
+func SetCookieEncryptionKey(secret string) {
+	secret = strings.TrimSpace(secret)
+	if secret == "" {
+		return
+	}
+	sum := sha256.Sum256([]byte("pulse-cookie-key:" + secret))
+	cookieKeyMu.Lock()
+	cookieKey = sum[:]
+	cookieKeyMu.Unlock()
+}
+
+func getCookieCipher() (cipher.AEAD, error) {
+	cookieKeyMu.RLock()
+	key := cookieKey
+	cookieKeyMu.RUnlock()
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	return cipher.NewGCM(block)
+}
+
+func encryptCookiePayload(plaintext []byte) (string, error) {
+	gcm, err := getCookieCipher()
+	if err != nil {
+		return "", err
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return "", err
+	}
+	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
+	return base64.RawURLEncoding.EncodeToString(ciphertext), nil
+}
+
+func decryptCookiePayload(encoded string) ([]byte, error) {
+	var raw []byte
+	var err error
+	if strings.Contains(encoded, "=") {
+		raw, err = base64.URLEncoding.DecodeString(encoded)
+	} else {
+		raw, err = base64.RawURLEncoding.DecodeString(encoded)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode session cookie: %w", err)
+	}
+
+	gcm, err := getCookieCipher()
+	if err != nil {
+		return nil, err
+	}
+	nonceSize := gcm.NonceSize()
+	if len(raw) < nonceSize {
+		return nil, fmt.Errorf("encrypted cookie payload too short")
+	}
+	nonce, ciphertext := raw[:nonceSize], raw[nonceSize:]
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt session cookie: %w", err)
+	}
+	return plaintext, nil
+}
+
 func SetSessionCookie(w http.ResponseWriter, token *oauth2.Token) error {
 	tokenJSON, err := json.Marshal(token)
 	if err != nil {
 		return fmt.Errorf("failed to marshal token: %w", err)
 	}
 
-	encoded := base64.RawURLEncoding.EncodeToString(tokenJSON)
+	encoded, err := encryptCookiePayload(tokenJSON)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt token: %w", err)
+	}
 	cookie := &http.Cookie{
 		Name:     SessionCookieName,
 		Value:    encoded,
@@ -218,15 +301,9 @@ func GetSessionCookie(r *http.Request) (*oauth2.Token, error) {
 		return nil, fmt.Errorf("empty session cookie")
 	}
 
-	val := cookie.Value
-	var tokenJSON []byte
-	if strings.Contains(val, "=") {
-		tokenJSON, err = base64.URLEncoding.DecodeString(val)
-	} else {
-		tokenJSON, err = base64.RawURLEncoding.DecodeString(val)
-	}
+	tokenJSON, err := decryptCookiePayload(cookie.Value)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode session cookie: %w", err)
+		return nil, err
 	}
 
 	var token oauth2.Token
