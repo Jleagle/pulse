@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -145,5 +147,24 @@ func TestParsingHelpers(t *testing.T) {
 	}
 	if d := extractDate(nil, "2026-10-31T08:15:00Z"); d != "2026-10-31" {
 		t.Errorf("extractDate fallback = %q, want 2026-10-31", d)
+	}
+}
+
+func TestLoadDotEnv(t *testing.T) {
+	tmp := filepath.Join(t.TempDir(), ".env")
+	content := "# comment\nPULSE_TEST_ENV_VAR=\"hello-world\"\nexport PULSE_TEST_SECOND=42\n"
+	if err := os.WriteFile(tmp, []byte(content), 0600); err != nil {
+		t.Fatalf("failed to write temp .env: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Unsetenv("PULSE_TEST_ENV_VAR")
+		_ = os.Unsetenv("PULSE_TEST_SECOND")
+	})
+	loadDotEnv(tmp)
+	if got := os.Getenv("PULSE_TEST_ENV_VAR"); got != "hello-world" {
+		t.Errorf("PULSE_TEST_ENV_VAR = %q, want hello-world", got)
+	}
+	if got := os.Getenv("PULSE_TEST_SECOND"); got != "42" {
+		t.Errorf("PULSE_TEST_SECOND = %q, want 42", got)
 	}
 }

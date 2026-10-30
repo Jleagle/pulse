@@ -1,14 +1,44 @@
 package main
 
 import (
+	"bufio"
 	"cmp"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 )
 
+func loadDotEnv(path string) {
+	f, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		line = strings.TrimPrefix(line, "export ")
+		key, val, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		val = strings.TrimSpace(val)
+		val = strings.Trim(val, `"'`)
+		if key != "" && os.Getenv(key) == "" {
+			_ = os.Setenv(key, val)
+		}
+	}
+}
+
 func main() {
+	loadDotEnv(".env")
 	port := cmp.Or(os.Getenv("PORT"), os.Getenv("PULSE_PORT"), "8080")
 	clientID := cmp.Or(os.Getenv("CLIENT_ID"), os.Getenv("PULSE_CLIENT_ID"))
 	clientSecret := cmp.Or(os.Getenv("CLIENT_SECRET"), os.Getenv("PULSE_CLIENT_SECRET"))
