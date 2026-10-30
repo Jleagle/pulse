@@ -271,6 +271,8 @@ type StatelessService struct {
 	redirectURI  string
 	mu           sync.Mutex
 	backoffUntil time.Time
+	tokenMu      sync.Mutex
+	latestTokens map[string]*oauth2.Token
 }
 
 func NewStatelessService(clientID, clientSecret, redirectURI string) *StatelessService {
@@ -279,6 +281,7 @@ func NewStatelessService(clientID, clientSecret, redirectURI string) *StatelessS
 		clientID:     strings.TrimSpace(clientID),
 		clientSecret: strings.TrimSpace(clientSecret),
 		redirectURI:  strings.TrimSpace(redirectURI),
+		latestTokens: make(map[string]*oauth2.Token),
 	}
 }
 
@@ -356,11 +359,28 @@ func (s *StatelessService) GetOAuthClient(ctx context.Context, token *oauth2.Tok
 		return nil, fmt.Errorf("server OAuth client credentials are not configured")
 	}
 
+	s.tokenMu.Lock()
+	defer s.tokenMu.Unlock()
+
+	effectiveToken := token
+	if token.RefreshToken != "" {
+		if cached, ok := s.latestTokens[token.RefreshToken]; ok && cached.Valid() {
+			effectiveToken = cached
+		}
+	}
+
 	config := s.GetOAuthConfig("")
-	ts := config.TokenSource(ctx, token)
+	ts := config.TokenSource(ctx, effectiveToken)
 	newToken, err := ts.Token()
 	if err != nil {
 		return nil, fmt.Errorf("failed to refresh valid token: %w", err)
+	}
+
+	if token.RefreshToken != "" {
+		s.latestTokens[token.RefreshToken] = newToken
+	}
+	if newToken.RefreshToken != "" {
+		s.latestTokens[newToken.RefreshToken] = newToken
 	}
 
 	// If token refreshed, update browser cookie
