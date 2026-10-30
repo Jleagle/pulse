@@ -265,7 +265,22 @@ type ListDataPointsResponse struct {
 	NextPageToken string      `json:"nextPageToken"`
 }
 
-const ServerCacheTTL = 6 * time.Hour
+const (
+	ServerCacheTTL     = 6 * time.Hour
+	OutboundReqTimeout = 30 * time.Second
+)
+
+type contextTransport struct {
+	ctx  context.Context
+	base http.RoundTripper
+}
+
+func (t *contextTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if t.ctx != nil && req.Context() == context.Background() {
+		req = req.WithContext(t.ctx)
+	}
+	return t.base.RoundTrip(req)
+}
 
 type cachedStatsEntry struct {
 	resp     *StatsResponse
@@ -325,7 +340,11 @@ func (s *StatelessService) getWithRateLimit(client *http.Client, urlStr string) 
 		return nil, fmt.Errorf("RATE_LIMIT_BACKOFF: Google Health API rate limited. Please wait %.0f seconds", waitTime)
 	}
 
-	resp, err := client.Get(urlStr)
+	req, err := http.NewRequest(http.MethodGet, urlStr, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -412,7 +431,15 @@ func (s *StatelessService) GetOAuthClient(ctx context.Context, token *oauth2.Tok
 		_ = SetSessionCookie(w, r, newToken)
 	}
 
-	return oauth2.NewClient(ctx, ts), nil
+	httpClient := oauth2.NewClient(ctx, ts)
+	httpClient.Timeout = OutboundReqTimeout
+	if httpClient.Transport != nil && ctx != nil {
+		httpClient.Transport = &contextTransport{
+			ctx:  ctx,
+			base: httpClient.Transport,
+		}
+	}
+	return httpClient, nil
 }
 
 // Fetch User Profile from Google
