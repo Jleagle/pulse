@@ -457,14 +457,15 @@ func (s *StatelessService) FetchAllStats(client *http.Client, days int, metric, 
 
 	resp := &StatsResponse{}
 	var (
-		errSleep error
-		errRHR   error
-		errHRV   error
-		errAct   error
-		errWork  error
-		errVit   error
-		errNut   error
-		wg       sync.WaitGroup
+		errSleep      error
+		errRHR        error
+		errHRV        error
+		errAct        error
+		errHeartExtra error
+		errWork       error
+		errVit        error
+		errNut        error
+		wg            sync.WaitGroup
 	)
 
 	fetchSlp := metric == "" || metric == "overview" || metric == "sleep"
@@ -516,7 +517,7 @@ func (s *StatelessService) FetchAllStats(client *http.Client, days int, metric, 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			resp.HRZoneRecords, resp.VO2MaxRecords = s.fetchHRZonesAndVO2Max(client, startDateStr)
+			resp.HRZoneRecords, resp.VO2MaxRecords, errHeartExtra = s.fetchHRZonesAndVO2Max(client, startDateStr)
 		}()
 	}
 
@@ -613,6 +614,16 @@ func (s *StatelessService) FetchAllStats(client *http.Client, days int, metric, 
 		fmt.Printf("[Stateless Fetch] HRV error: %v\n", errHRV)
 	} else if fetchH {
 		fmt.Printf("[Stateless Fetch] Retrieved %d real HRV records from Google Health API\n", len(resp.HRVRecords))
+	}
+
+	if errHeartExtra != nil && fetchHeartExtra {
+		if strings.Contains(errHeartExtra.Error(), "RATE_LIMIT_BACKOFF") {
+			return nil, errHeartExtra
+		}
+		if isScopeErr(errHeartExtra) {
+			addMissingScope("heart")
+		}
+		fmt.Printf("[Stateless Fetch] Heart extra error: %v\n", errHeartExtra)
 	}
 
 	if errAct != nil && fetchA {
@@ -982,34 +993,53 @@ func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDat
 	var (
 		nextStepsToken string
 		subWg          sync.WaitGroup
+		errMu          sync.Mutex
+		firstErr       error
 	)
+	recordErr := func(err error) {
+		if err == nil {
+			return
+		}
+		errMu.Lock()
+		if firstErr == nil || strings.Contains(err.Error(), "RATE_LIMIT_BACKOFF") {
+			firstErr = err
+		}
+		errMu.Unlock()
+	}
+	checkRespErr := func(resp *http.Response) {
+		if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
+			body, _ := io.ReadAll(resp.Body)
+			recordErr(fmt.Errorf("API error (%d): %s", resp.StatusCode, string(body)))
+		}
+	}
 
 	// 1. Fetch Steps
 	subWg.Add(1)
 	go func() {
 		defer subWg.Done()
 		resp, err := s.getWithRateLimit(client, buildURL("steps"))
-		if err == nil {
-			if resp.StatusCode == http.StatusOK {
-				var listResp ListDataPointsResponse
-				if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
-					nextStepsToken = listResp.NextPageToken
-					for _, dp := range listResp.DataPoints {
-						if dp.Steps != nil {
-							d := getDateStr(dp.Steps.Interval.CivilStartTime, dp.Steps.Interval.StartTime)
-							if d != "" {
-								cnt, _ := strconv.Atoi(dp.Steps.Count)
-								stepsMap[d] += cnt
-							}
+		if err != nil {
+			recordErr(err)
+			return
+		}
+		if resp.StatusCode == http.StatusOK {
+			var listResp ListDataPointsResponse
+			if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
+				nextStepsToken = listResp.NextPageToken
+				for _, dp := range listResp.DataPoints {
+					if dp.Steps != nil {
+						d := getDateStr(dp.Steps.Interval.CivilStartTime, dp.Steps.Interval.StartTime)
+						if d != "" {
+							cnt, _ := strconv.Atoi(dp.Steps.Count)
+							stepsMap[d] += cnt
 						}
 					}
 				}
-			} else {
-				body, _ := io.ReadAll(resp.Body)
-				fmt.Printf("[Stateless Fetch] Steps API error (%d): %s\n", resp.StatusCode, string(body))
 			}
-			resp.Body.Close()
+		} else {
+			checkRespErr(resp)
 		}
+		resp.Body.Close()
 	}()
 
 	// 2. Fetch Active Energy Burned
@@ -1017,22 +1047,26 @@ func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDat
 	go func() {
 		defer subWg.Done()
 		resp, err := s.getWithRateLimit(client, buildURL("active-energy-burned"))
-		if err == nil {
-			if resp.StatusCode == http.StatusOK {
-				var listResp ListDataPointsResponse
-				if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
-					for _, dp := range listResp.DataPoints {
-						if dp.ActiveEnergyBurned != nil {
-							d := getDateStr(dp.ActiveEnergyBurned.Interval.CivilStartTime, dp.ActiveEnergyBurned.Interval.StartTime)
-							if d != "" {
-								caloriesMap[d] += int(dp.ActiveEnergyBurned.Kcal)
-							}
+		if err != nil {
+			recordErr(err)
+			return
+		}
+		if resp.StatusCode == http.StatusOK {
+			var listResp ListDataPointsResponse
+			if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
+				for _, dp := range listResp.DataPoints {
+					if dp.ActiveEnergyBurned != nil {
+						d := getDateStr(dp.ActiveEnergyBurned.Interval.CivilStartTime, dp.ActiveEnergyBurned.Interval.StartTime)
+						if d != "" {
+							caloriesMap[d] += int(dp.ActiveEnergyBurned.Kcal)
 						}
 					}
 				}
 			}
-			resp.Body.Close()
+		} else {
+			checkRespErr(resp)
 		}
+		resp.Body.Close()
 	}()
 
 	// 3. Fetch Basal Energy Burned
@@ -1040,22 +1074,26 @@ func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDat
 	go func() {
 		defer subWg.Done()
 		resp, err := s.getWithRateLimit(client, buildURL("basal-energy-burned"))
-		if err == nil {
-			if resp.StatusCode == http.StatusOK {
-				var listResp ListDataPointsResponse
-				if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
-					for _, dp := range listResp.DataPoints {
-						if dp.BasalEnergyBurned != nil {
-							d := getDateStr(dp.BasalEnergyBurned.Interval.CivilStartTime, dp.BasalEnergyBurned.Interval.StartTime)
-							if d != "" {
-								basalMap[d] += parseAnyInt(dp.BasalEnergyBurned.Kcal)
-							}
+		if err != nil {
+			recordErr(err)
+			return
+		}
+		if resp.StatusCode == http.StatusOK {
+			var listResp ListDataPointsResponse
+			if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
+				for _, dp := range listResp.DataPoints {
+					if dp.BasalEnergyBurned != nil {
+						d := getDateStr(dp.BasalEnergyBurned.Interval.CivilStartTime, dp.BasalEnergyBurned.Interval.StartTime)
+						if d != "" {
+							basalMap[d] += parseAnyInt(dp.BasalEnergyBurned.Kcal)
 						}
 					}
 				}
 			}
-			resp.Body.Close()
+		} else {
+			checkRespErr(resp)
 		}
+		resp.Body.Close()
 	}()
 
 	// 4. Fetch Active Minutes
@@ -1063,27 +1101,31 @@ func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDat
 	go func() {
 		defer subWg.Done()
 		resp, err := s.getWithRateLimit(client, buildURL("active-minutes"))
-		if err == nil {
-			if resp.StatusCode == http.StatusOK {
-				var listResp ListDataPointsResponse
-				if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
-					for _, dp := range listResp.DataPoints {
-						if dp.ActiveMinutes != nil {
-							d := getDateStr(dp.ActiveMinutes.Interval.CivilStartTime, dp.ActiveMinutes.Interval.StartTime)
-							if d != "" {
-								subSum := 0
-								for _, level := range dp.ActiveMinutes.ActiveMinutesByActivityLevel {
-									val, _ := strconv.Atoi(level.ActiveMinutes)
-									subSum += val
-								}
-								minutesMap[d] += subSum
+		if err != nil {
+			recordErr(err)
+			return
+		}
+		if resp.StatusCode == http.StatusOK {
+			var listResp ListDataPointsResponse
+			if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
+				for _, dp := range listResp.DataPoints {
+					if dp.ActiveMinutes != nil {
+						d := getDateStr(dp.ActiveMinutes.Interval.CivilStartTime, dp.ActiveMinutes.Interval.StartTime)
+						if d != "" {
+							subSum := 0
+							for _, level := range dp.ActiveMinutes.ActiveMinutesByActivityLevel {
+								val, _ := strconv.Atoi(level.ActiveMinutes)
+								subSum += val
 							}
+							minutesMap[d] += subSum
 						}
 					}
 				}
 			}
-			resp.Body.Close()
+		} else {
+			checkRespErr(resp)
 		}
+		resp.Body.Close()
 	}()
 
 	// 5. Fetch Distance
@@ -1091,26 +1133,30 @@ func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDat
 	go func() {
 		defer subWg.Done()
 		resp, err := s.getWithRateLimit(client, buildURL("distance"))
-		if err == nil {
-			if resp.StatusCode == http.StatusOK {
-				var listResp ListDataPointsResponse
-				if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
-					for _, dp := range listResp.DataPoints {
-						if dp.Distance != nil {
-							d := getDateStr(dp.Distance.Interval.CivilStartTime, dp.Distance.Interval.StartTime)
-							if d != "" {
-								mm := parseAnyFloat(dp.Distance.DistanceMillimeters)
-								if mm == 0 {
-									mm = parseAnyFloat(dp.Distance.Millimeters)
-								}
-								distanceMap[d] += mm / 1000000.0
+		if err != nil {
+			recordErr(err)
+			return
+		}
+		if resp.StatusCode == http.StatusOK {
+			var listResp ListDataPointsResponse
+			if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
+				for _, dp := range listResp.DataPoints {
+					if dp.Distance != nil {
+						d := getDateStr(dp.Distance.Interval.CivilStartTime, dp.Distance.Interval.StartTime)
+						if d != "" {
+							mm := parseAnyFloat(dp.Distance.DistanceMillimeters)
+							if mm == 0 {
+								mm = parseAnyFloat(dp.Distance.Millimeters)
 							}
+							distanceMap[d] += mm / 1000000.0
 						}
 					}
 				}
 			}
-			resp.Body.Close()
+		} else {
+			checkRespErr(resp)
 		}
+		resp.Body.Close()
 	}()
 
 	// 6. Fetch Floors
@@ -1118,27 +1164,31 @@ func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDat
 	go func() {
 		defer subWg.Done()
 		resp, err := s.getWithRateLimit(client, buildURL("floors"))
-		if err == nil {
-			if resp.StatusCode == http.StatusOK {
-				var listResp ListDataPointsResponse
-				if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
-					for _, dp := range listResp.DataPoints {
-						if dp.Floors != nil {
-							d := getDateStr(dp.Floors.Interval.CivilStartTime, dp.Floors.Interval.StartTime)
-							if d != "" {
-								cnt, _ := strconv.Atoi(dp.Floors.Count)
-								for _, v := range dp.Floors.Values {
-									vc, _ := strconv.Atoi(v.Count)
-									cnt += vc
-								}
-								floorsMap[d] += cnt
+		if err != nil {
+			recordErr(err)
+			return
+		}
+		if resp.StatusCode == http.StatusOK {
+			var listResp ListDataPointsResponse
+			if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
+				for _, dp := range listResp.DataPoints {
+					if dp.Floors != nil {
+						d := getDateStr(dp.Floors.Interval.CivilStartTime, dp.Floors.Interval.StartTime)
+						if d != "" {
+							cnt, _ := strconv.Atoi(dp.Floors.Count)
+							for _, v := range dp.Floors.Values {
+								vc, _ := strconv.Atoi(v.Count)
+								cnt += vc
 							}
+							floorsMap[d] += cnt
 						}
 					}
 				}
 			}
-			resp.Body.Close()
+		} else {
+			checkRespErr(resp)
 		}
+		resp.Body.Close()
 	}()
 
 	subWg.Wait()
@@ -1188,15 +1238,33 @@ func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDat
 		nextStepsToken = ""
 	}
 
-	return records, nextStepsToken, nil
+	return records, nextStepsToken, firstErr
 }
 
-func (s *StatelessService) fetchHRZonesAndVO2Max(client *http.Client, startDateStr string) ([]HRZoneRecord, []VO2MaxRecord) {
+func (s *StatelessService) fetchHRZonesAndVO2Max(client *http.Client, startDateStr string) ([]HRZoneRecord, []VO2MaxRecord, error) {
 	var (
-		zones []HRZoneRecord
-		vo2s  []VO2MaxRecord
-		subWg sync.WaitGroup
+		zones    []HRZoneRecord
+		vo2s     []VO2MaxRecord
+		subWg    sync.WaitGroup
+		errMu    sync.Mutex
+		firstErr error
 	)
+	recordErr := func(err error) {
+		if err == nil {
+			return
+		}
+		errMu.Lock()
+		if firstErr == nil || strings.Contains(err.Error(), "RATE_LIMIT_BACKOFF") {
+			firstErr = err
+		}
+		errMu.Unlock()
+	}
+	checkRespErr := func(resp *http.Response) {
+		if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
+			body, _ := io.ReadAll(resp.Body)
+			recordErr(fmt.Errorf("API error (%d): %s", resp.StatusCode, string(body)))
+		}
+	}
 
 	// 1. Fetch Time in Heart Rate Zone
 	subWg.Add(1)
@@ -1204,62 +1272,66 @@ func (s *StatelessService) fetchHRZonesAndVO2Max(client *http.Client, startDateS
 		defer subWg.Done()
 		zoneMap := make(map[string]*HRZoneRecord)
 		resp, err := s.getWithRateLimit(client, "https://health.googleapis.com/v4/users/me/dataTypes/time-in-heart-rate-zone/dataPoints?pageSize=50000")
-		if err == nil {
-			if resp.StatusCode == http.StatusOK {
-				var listResp ListDataPointsResponse
-				if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
-					for _, dp := range listResp.DataPoints {
-						if dp.TimeInHeartRateZone == nil {
-							continue
+		if err != nil {
+			recordErr(err)
+			return
+		}
+		if resp.StatusCode == http.StatusOK {
+			var listResp ListDataPointsResponse
+			if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
+				for _, dp := range listResp.DataPoints {
+					if dp.TimeInHeartRateZone == nil {
+						continue
+					}
+					z := dp.TimeInHeartRateZone
+					startRaw := z.Interval.StartTime
+					if startRaw == "" {
+						startRaw = z.StartTime
+					}
+					endRaw := z.Interval.EndTime
+					if endRaw == "" {
+						endRaw = z.EndTime
+					}
+					var d string
+					if z.Interval.CivilStartTime != nil {
+						d = z.Interval.CivilStartTime.Date.String()
+					} else if t, err := time.Parse(time.RFC3339, startRaw); err == nil {
+						d = t.Format("2006-01-02")
+					}
+					if d == "" || d < startDateStr {
+						continue
+					}
+					durMin := 1
+					st, err1 := time.Parse(time.RFC3339, startRaw)
+					et, err2 := time.Parse(time.RFC3339, endRaw)
+					if err1 == nil && err2 == nil {
+						m := int(math.Round(et.Sub(st).Minutes()))
+						if m > 0 {
+							durMin = m
 						}
-						z := dp.TimeInHeartRateZone
-						startRaw := z.Interval.StartTime
-						if startRaw == "" {
-							startRaw = z.StartTime
-						}
-						endRaw := z.Interval.EndTime
-						if endRaw == "" {
-							endRaw = z.EndTime
-						}
-						var d string
-						if z.Interval.CivilStartTime != nil {
-							d = z.Interval.CivilStartTime.Date.String()
-						} else if t, err := time.Parse(time.RFC3339, startRaw); err == nil {
-							d = t.Format("2006-01-02")
-						}
-						if d == "" || d < startDateStr {
-							continue
-						}
-						durMin := 1
-						st, err1 := time.Parse(time.RFC3339, startRaw)
-						et, err2 := time.Parse(time.RFC3339, endRaw)
-						if err1 == nil && err2 == nil {
-							m := int(math.Round(et.Sub(st).Minutes()))
-							if m > 0 {
-								durMin = m
-							}
-						}
-						rec, ok := zoneMap[d]
-						if !ok {
-							rec = &HRZoneRecord{Date: d}
-							zoneMap[d] = rec
-						}
-						zt := strings.ToUpper(z.HeartRateZoneType)
-						switch {
-						case strings.Contains(zt, "PEAK"):
-							rec.PeakMinutes += durMin
-						case strings.Contains(zt, "VIGOROUS") || strings.Contains(zt, "CARDIO"):
-							rec.VigorousMinutes += durMin
-						case strings.Contains(zt, "MODERATE") || strings.Contains(zt, "FAT_BURN"):
-							rec.ModerateMinutes += durMin
-						default:
-							rec.LightMinutes += durMin
-						}
+					}
+					rec, ok := zoneMap[d]
+					if !ok {
+						rec = &HRZoneRecord{Date: d}
+						zoneMap[d] = rec
+					}
+					zt := strings.ToUpper(z.HeartRateZoneType)
+					switch {
+					case strings.Contains(zt, "PEAK"):
+						rec.PeakMinutes += durMin
+					case strings.Contains(zt, "VIGOROUS") || strings.Contains(zt, "CARDIO"):
+						rec.VigorousMinutes += durMin
+					case strings.Contains(zt, "MODERATE") || strings.Contains(zt, "FAT_BURN"):
+						rec.ModerateMinutes += durMin
+					default:
+						rec.LightMinutes += durMin
 					}
 				}
 			}
-			resp.Body.Close()
+		} else {
+			checkRespErr(resp)
 		}
+		resp.Body.Close()
 		for _, r := range zoneMap {
 			zones = append(zones, *r)
 		}
@@ -1271,16 +1343,51 @@ func (s *StatelessService) fetchHRZonesAndVO2Max(client *http.Client, startDateS
 		defer subWg.Done()
 		vo2Map := make(map[string]float64)
 		resp, err := s.getWithRateLimit(client, "https://health.googleapis.com/v4/users/me/dataTypes/daily-vo2-max/dataPoints?pageSize=50000")
-		if err == nil {
+		if err != nil {
+			recordErr(err)
+			return
+		}
+		if resp.StatusCode == http.StatusOK {
+			var listResp ListDataPointsResponse
+			if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
+				for _, dp := range listResp.DataPoints {
+					if dp.DailyVO2Max != nil {
+						d := dp.DailyVO2Max.Date.String()
+						val := parseAnyFloat(dp.DailyVO2Max.VO2Max)
+						if val == 0 {
+							val = parseAnyFloat(dp.DailyVO2Max.VO2MaxValue)
+						}
+						if d >= startDateStr && val > 0 {
+							vo2Map[d] = math.Round(val*10) / 10
+						}
+					}
+				}
+			}
+		} else {
+			checkRespErr(resp)
+		}
+		resp.Body.Close()
+
+		if len(vo2Map) == 0 {
+			resp, err = s.getWithRateLimit(client, "https://health.googleapis.com/v4/users/me/dataTypes/vo2-max/dataPoints?pageSize=50000")
+			if err != nil {
+				recordErr(err)
+				return
+			}
 			if resp.StatusCode == http.StatusOK {
 				var listResp ListDataPointsResponse
 				if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
 					for _, dp := range listResp.DataPoints {
-						if dp.DailyVO2Max != nil {
-							d := dp.DailyVO2Max.Date.String()
-							val := parseAnyFloat(dp.DailyVO2Max.VO2Max)
+						if dp.VO2Max != nil {
+							var d string
+							if dp.VO2Max.SampleTime.CivilTime != nil {
+								d = dp.VO2Max.SampleTime.CivilTime.Date.String()
+							} else if t, err := time.Parse(time.RFC3339, dp.VO2Max.SampleTime.PhysicalTime); err == nil {
+								d = t.Format("2006-01-02")
+							}
+							val := parseAnyFloat(dp.VO2Max.VO2MaxValue)
 							if val == 0 {
-								val = parseAnyFloat(dp.DailyVO2Max.VO2MaxValue)
+								val = parseAnyFloat(dp.VO2Max.VO2Max)
 							}
 							if d >= startDateStr && val > 0 {
 								vo2Map[d] = math.Round(val*10) / 10
@@ -1288,37 +1395,10 @@ func (s *StatelessService) fetchHRZonesAndVO2Max(client *http.Client, startDateS
 						}
 					}
 				}
+			} else {
+				checkRespErr(resp)
 			}
 			resp.Body.Close()
-		}
-
-		if len(vo2Map) == 0 {
-			resp, err = s.getWithRateLimit(client, "https://health.googleapis.com/v4/users/me/dataTypes/vo2-max/dataPoints?pageSize=50000")
-			if err == nil {
-				if resp.StatusCode == http.StatusOK {
-					var listResp ListDataPointsResponse
-					if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
-						for _, dp := range listResp.DataPoints {
-							if dp.VO2Max != nil {
-								var d string
-								if dp.VO2Max.SampleTime.CivilTime != nil {
-									d = dp.VO2Max.SampleTime.CivilTime.Date.String()
-								} else if t, err := time.Parse(time.RFC3339, dp.VO2Max.SampleTime.PhysicalTime); err == nil {
-									d = t.Format("2006-01-02")
-								}
-								val := parseAnyFloat(dp.VO2Max.VO2MaxValue)
-								if val == 0 {
-									val = parseAnyFloat(dp.VO2Max.VO2Max)
-								}
-								if d >= startDateStr && val > 0 {
-									vo2Map[d] = math.Round(val*10) / 10
-								}
-							}
-						}
-					}
-				}
-				resp.Body.Close()
-			}
 		}
 
 		for d, v := range vo2Map {
@@ -1327,7 +1407,7 @@ func (s *StatelessService) fetchHRZonesAndVO2Max(client *http.Client, startDateS
 	}()
 
 	subWg.Wait()
-	return zones, vo2s
+	return zones, vo2s, firstErr
 }
 
 func parseDurationMinutes(durStr string) int {
@@ -1628,45 +1708,67 @@ func (s *StatelessService) FetchExerciseRoute(client *http.Client, exerciseID st
 
 func (s *StatelessService) fetchVitalsAndBody(client *http.Client, startDateStr string) ([]SpO2Record, []RespiratoryRateRecord, []SleepTempRecord, []BodyRecord, error) {
 	var (
-		spo2s []SpO2Record
-		resps []RespiratoryRateRecord
-		temps []SleepTempRecord
-		bodys []BodyRecord
-		subWg sync.WaitGroup
+		spo2s    []SpO2Record
+		resps    []RespiratoryRateRecord
+		temps    []SleepTempRecord
+		bodys    []BodyRecord
+		subWg    sync.WaitGroup
+		errMu    sync.Mutex
+		firstErr error
 	)
 	weightMap := make(map[string]float64)
 	fatMap := make(map[string]float64)
+	recordErr := func(err error) {
+		if err == nil {
+			return
+		}
+		errMu.Lock()
+		if firstErr == nil || strings.Contains(err.Error(), "RATE_LIMIT_BACKOFF") {
+			firstErr = err
+		}
+		errMu.Unlock()
+	}
+	checkRespErr := func(resp *http.Response) {
+		if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
+			body, _ := io.ReadAll(resp.Body)
+			recordErr(fmt.Errorf("API error (%d): %s", resp.StatusCode, string(body)))
+		}
+	}
 
 	// 1. Daily Oxygen Saturation (SpO2)
 	subWg.Add(1)
 	go func() {
 		defer subWg.Done()
 		resp, err := s.getWithRateLimit(client, "https://health.googleapis.com/v4/users/me/dataTypes/daily-oxygen-saturation/dataPoints?pageSize=50000")
-		if err == nil {
-			if resp.StatusCode == http.StatusOK {
-				var listResp ListDataPointsResponse
-				if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
-					for _, dp := range listResp.DataPoints {
-						if dp.DailyOxygenSaturation != nil {
-							o := dp.DailyOxygenSaturation
-							d := o.Date.String()
-							avgPct := parseAnyFloat(o.AveragePercentage)
-							minPct := parseAnyFloat(o.LowerBoundPercentage)
-							maxPct := parseAnyFloat(o.UpperBoundPercentage)
-							if d >= startDateStr && avgPct > 0 {
-								spo2s = append(spo2s, SpO2Record{
-									Date:       d,
-									AvgPercent: math.Round(avgPct*10) / 10,
-									MinPercent: math.Round(minPct*10) / 10,
-									MaxPercent: math.Round(maxPct*10) / 10,
-								})
-							}
+		if err != nil {
+			recordErr(err)
+			return
+		}
+		if resp.StatusCode == http.StatusOK {
+			var listResp ListDataPointsResponse
+			if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
+				for _, dp := range listResp.DataPoints {
+					if dp.DailyOxygenSaturation != nil {
+						o := dp.DailyOxygenSaturation
+						d := o.Date.String()
+						avgPct := parseAnyFloat(o.AveragePercentage)
+						minPct := parseAnyFloat(o.LowerBoundPercentage)
+						maxPct := parseAnyFloat(o.UpperBoundPercentage)
+						if d >= startDateStr && avgPct > 0 {
+							spo2s = append(spo2s, SpO2Record{
+								Date:       d,
+								AvgPercent: math.Round(avgPct*10) / 10,
+								MinPercent: math.Round(minPct*10) / 10,
+								MaxPercent: math.Round(maxPct*10) / 10,
+							})
 						}
 					}
 				}
 			}
-			resp.Body.Close()
+		} else {
+			checkRespErr(resp)
 		}
+		resp.Body.Close()
 	}()
 
 	// 2. Daily Respiratory Rate
@@ -1674,30 +1776,34 @@ func (s *StatelessService) fetchVitalsAndBody(client *http.Client, startDateStr 
 	go func() {
 		defer subWg.Done()
 		resp, err := s.getWithRateLimit(client, "https://health.googleapis.com/v4/users/me/dataTypes/daily-respiratory-rate/dataPoints?pageSize=50000")
-		if err == nil {
-			if resp.StatusCode == http.StatusOK {
-				var listResp ListDataPointsResponse
-				if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
-					for _, dp := range listResp.DataPoints {
-						if dp.DailyRespiratoryRate != nil {
-							rr := dp.DailyRespiratoryRate
-							d := rr.Date.String()
-							val := parseAnyFloat(rr.RateBpm)
-							if val == 0 {
-								val = parseAnyFloat(rr.BreathsPerMinute)
-							}
-							if d >= startDateStr && val > 0 {
-								resps = append(resps, RespiratoryRateRecord{
-									Date:             d,
-									BreathsPerMinute: math.Round(val*10) / 10,
-								})
-							}
+		if err != nil {
+			recordErr(err)
+			return
+		}
+		if resp.StatusCode == http.StatusOK {
+			var listResp ListDataPointsResponse
+			if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
+				for _, dp := range listResp.DataPoints {
+					if dp.DailyRespiratoryRate != nil {
+						rr := dp.DailyRespiratoryRate
+						d := rr.Date.String()
+						val := parseAnyFloat(rr.RateBpm)
+						if val == 0 {
+							val = parseAnyFloat(rr.BreathsPerMinute)
+						}
+						if d >= startDateStr && val > 0 {
+							resps = append(resps, RespiratoryRateRecord{
+								Date:             d,
+								BreathsPerMinute: math.Round(val*10) / 10,
+							})
 						}
 					}
 				}
 			}
-			resp.Body.Close()
+		} else {
+			checkRespErr(resp)
 		}
+		resp.Body.Close()
 	}()
 
 	// 3. Daily Sleep Temperature Derivations
@@ -1705,35 +1811,39 @@ func (s *StatelessService) fetchVitalsAndBody(client *http.Client, startDateStr 
 	go func() {
 		defer subWg.Done()
 		resp, err := s.getWithRateLimit(client, "https://health.googleapis.com/v4/users/me/dataTypes/daily-sleep-temperature-derivations/dataPoints?pageSize=50000")
-		if err == nil {
-			if resp.StatusCode == http.StatusOK {
-				var listResp ListDataPointsResponse
-				if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
-					for _, dp := range listResp.DataPoints {
-						if dp.DailySleepTemperatureDerivations != nil {
-							st := dp.DailySleepTemperatureDerivations
-							d := st.Date.String()
-							nightlyC := parseAnyFloat(st.NightlyTemperatureCelsius)
-							baseC := parseAnyFloat(st.BaselineTemperatureCelsius)
-							if d >= startDateStr && nightlyC > 0 {
-								base := nightlyC
-								if baseC > 0 {
-									base = baseC
-								}
-								delta := math.Round((nightlyC-base)*100) / 100
-								temps = append(temps, SleepTempRecord{
-									Date:         d,
-									NightlyTempC: math.Round(nightlyC*100) / 100,
-									BaselineC:    math.Round(base*100) / 100,
-									DeltaC:       delta,
-								})
+		if err != nil {
+			recordErr(err)
+			return
+		}
+		if resp.StatusCode == http.StatusOK {
+			var listResp ListDataPointsResponse
+			if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
+				for _, dp := range listResp.DataPoints {
+					if dp.DailySleepTemperatureDerivations != nil {
+						st := dp.DailySleepTemperatureDerivations
+						d := st.Date.String()
+						nightlyC := parseAnyFloat(st.NightlyTemperatureCelsius)
+						baseC := parseAnyFloat(st.BaselineTemperatureCelsius)
+						if d >= startDateStr && nightlyC > 0 {
+							base := nightlyC
+							if baseC > 0 {
+								base = baseC
 							}
+							delta := math.Round((nightlyC-base)*100) / 100
+							temps = append(temps, SleepTempRecord{
+								Date:         d,
+								NightlyTempC: math.Round(nightlyC*100) / 100,
+								BaselineC:    math.Round(base*100) / 100,
+								DeltaC:       delta,
+							})
 						}
 					}
 				}
 			}
-			resp.Body.Close()
+		} else {
+			checkRespErr(resp)
 		}
+		resp.Body.Close()
 	}()
 
 	// 4. Weight
@@ -1741,30 +1851,34 @@ func (s *StatelessService) fetchVitalsAndBody(client *http.Client, startDateStr 
 	go func() {
 		defer subWg.Done()
 		resp, err := s.getWithRateLimit(client, "https://health.googleapis.com/v4/users/me/dataTypes/weight/dataPoints?pageSize=50000")
-		if err == nil {
-			if resp.StatusCode == http.StatusOK {
-				var listResp ListDataPointsResponse
-				if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
-					for _, dp := range listResp.DataPoints {
-						if dp.Weight != nil {
-							wg := parseAnyFloat(dp.Weight.WeightGrams)
-							if wg > 0 {
-								var d string
-								if dp.Weight.SampleTime.CivilTime != nil {
-									d = dp.Weight.SampleTime.CivilTime.Date.String()
-								} else if t, err := time.Parse(time.RFC3339, dp.Weight.SampleTime.PhysicalTime); err == nil {
-									d = t.Format("2006-01-02")
-								}
-								if d >= startDateStr {
-									weightMap[d] = math.Round((wg/1000.0)*10) / 10
-								}
+		if err != nil {
+			recordErr(err)
+			return
+		}
+		if resp.StatusCode == http.StatusOK {
+			var listResp ListDataPointsResponse
+			if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
+				for _, dp := range listResp.DataPoints {
+					if dp.Weight != nil {
+						wg := parseAnyFloat(dp.Weight.WeightGrams)
+						if wg > 0 {
+							var d string
+							if dp.Weight.SampleTime.CivilTime != nil {
+								d = dp.Weight.SampleTime.CivilTime.Date.String()
+							} else if t, err := time.Parse(time.RFC3339, dp.Weight.SampleTime.PhysicalTime); err == nil {
+								d = t.Format("2006-01-02")
+							}
+							if d >= startDateStr {
+								weightMap[d] = math.Round((wg/1000.0)*10) / 10
 							}
 						}
 					}
 				}
 			}
-			resp.Body.Close()
+		} else {
+			checkRespErr(resp)
 		}
+		resp.Body.Close()
 	}()
 
 	// 5. Body Fat
@@ -1772,30 +1886,34 @@ func (s *StatelessService) fetchVitalsAndBody(client *http.Client, startDateStr 
 	go func() {
 		defer subWg.Done()
 		resp, err := s.getWithRateLimit(client, "https://health.googleapis.com/v4/users/me/dataTypes/body-fat/dataPoints?pageSize=50000")
-		if err == nil {
-			if resp.StatusCode == http.StatusOK {
-				var listResp ListDataPointsResponse
-				if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
-					for _, dp := range listResp.DataPoints {
-						if dp.BodyFat != nil {
-							pct := parseAnyFloat(dp.BodyFat.Percentage)
-							if pct > 0 {
-								var d string
-								if dp.BodyFat.SampleTime.CivilTime != nil {
-									d = dp.BodyFat.SampleTime.CivilTime.Date.String()
-								} else if t, err := time.Parse(time.RFC3339, dp.BodyFat.SampleTime.PhysicalTime); err == nil {
-									d = t.Format("2006-01-02")
-								}
-								if d >= startDateStr {
-									fatMap[d] = math.Round(pct*10) / 10
-								}
+		if err != nil {
+			recordErr(err)
+			return
+		}
+		if resp.StatusCode == http.StatusOK {
+			var listResp ListDataPointsResponse
+			if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
+				for _, dp := range listResp.DataPoints {
+					if dp.BodyFat != nil {
+						pct := parseAnyFloat(dp.BodyFat.Percentage)
+						if pct > 0 {
+							var d string
+							if dp.BodyFat.SampleTime.CivilTime != nil {
+								d = dp.BodyFat.SampleTime.CivilTime.Date.String()
+							} else if t, err := time.Parse(time.RFC3339, dp.BodyFat.SampleTime.PhysicalTime); err == nil {
+								d = t.Format("2006-01-02")
+							}
+							if d >= startDateStr {
+								fatMap[d] = math.Round(pct*10) / 10
 							}
 						}
 					}
 				}
 			}
-			resp.Body.Close()
+		} else {
+			checkRespErr(resp)
 		}
+		resp.Body.Close()
 	}()
 
 	subWg.Wait()
@@ -1820,14 +1938,32 @@ func (s *StatelessService) fetchVitalsAndBody(client *http.Client, startDateStr 
 		bodys = append(bodys, rec)
 	}
 
-	return spo2s, resps, temps, bodys, nil
+	return spo2s, resps, temps, bodys, firstErr
 }
 
 func (s *StatelessService) fetchNutrition(client *http.Client, startDateStr string) ([]NutritionRecord, error) {
 	var (
-		nutMu sync.Mutex
-		subWg sync.WaitGroup
+		nutMu    sync.Mutex
+		subWg    sync.WaitGroup
+		errMu    sync.Mutex
+		firstErr error
 	)
+	recordErr := func(err error) {
+		if err == nil {
+			return
+		}
+		errMu.Lock()
+		if firstErr == nil || strings.Contains(err.Error(), "RATE_LIMIT_BACKOFF") {
+			firstErr = err
+		}
+		errMu.Unlock()
+	}
+	checkRespErr := func(resp *http.Response) {
+		if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
+			body, _ := io.ReadAll(resp.Body)
+			recordErr(fmt.Errorf("API error (%d): %s", resp.StatusCode, string(body)))
+		}
+	}
 	nutMap := make(map[string]*NutritionRecord)
 	getRec := func(d string) *NutritionRecord {
 		r, ok := nutMap[d]
@@ -1843,29 +1979,33 @@ func (s *StatelessService) fetchNutrition(client *http.Client, startDateStr stri
 	go func() {
 		defer subWg.Done()
 		resp, err := s.getWithRateLimit(client, "https://health.googleapis.com/v4/users/me/dataTypes/hydration-log/dataPoints?pageSize=50000")
-		if err == nil {
-			if resp.StatusCode == http.StatusOK {
-				var listResp ListDataPointsResponse
-				if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
-					nutMu.Lock()
-					for _, dp := range listResp.DataPoints {
-						if dp.HydrationLog != nil {
-							var d string
-							if dp.HydrationLog.Interval.CivilStartTime != nil {
-								d = dp.HydrationLog.Interval.CivilStartTime.Date.String()
-							} else if t, err := time.Parse(time.RFC3339, dp.HydrationLog.Interval.StartTime); err == nil {
-								d = t.Format("2006-01-02")
-							}
-							if d >= startDateStr {
-								getRec(d).HydrationMl += parseAnyInt(dp.HydrationLog.AmountConsumed.Milliliters)
-							}
+		if err != nil {
+			recordErr(err)
+			return
+		}
+		if resp.StatusCode == http.StatusOK {
+			var listResp ListDataPointsResponse
+			if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
+				nutMu.Lock()
+				for _, dp := range listResp.DataPoints {
+					if dp.HydrationLog != nil {
+						var d string
+						if dp.HydrationLog.Interval.CivilStartTime != nil {
+							d = dp.HydrationLog.Interval.CivilStartTime.Date.String()
+						} else if t, err := time.Parse(time.RFC3339, dp.HydrationLog.Interval.StartTime); err == nil {
+							d = t.Format("2006-01-02")
+						}
+						if d >= startDateStr {
+							getRec(d).HydrationMl += parseAnyInt(dp.HydrationLog.AmountConsumed.Milliliters)
 						}
 					}
-					nutMu.Unlock()
 				}
+				nutMu.Unlock()
 			}
-			resp.Body.Close()
+		} else {
+			checkRespErr(resp)
 		}
+		resp.Body.Close()
 	}()
 
 	// 2. Nutrition Log
@@ -1873,45 +2013,49 @@ func (s *StatelessService) fetchNutrition(client *http.Client, startDateStr stri
 	go func() {
 		defer subWg.Done()
 		resp, err := s.getWithRateLimit(client, "https://health.googleapis.com/v4/users/me/dataTypes/nutrition-log/dataPoints?pageSize=50000")
-		if err == nil {
-			if resp.StatusCode == http.StatusOK {
-				var listResp ListDataPointsResponse
-				if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
-					nutMu.Lock()
-					for _, dp := range listResp.DataPoints {
-						if dp.NutritionLog != nil {
-							nl := dp.NutritionLog
-							var d string
-							if nl.Interval.CivilStartTime != nil {
-								d = nl.Interval.CivilStartTime.Date.String()
-							} else if t, err := time.Parse(time.RFC3339, nl.Interval.StartTime); err == nil {
-								d = t.Format("2006-01-02")
+		if err != nil {
+			recordErr(err)
+			return
+		}
+		if resp.StatusCode == http.StatusOK {
+			var listResp ListDataPointsResponse
+			if json.NewDecoder(resp.Body).Decode(&listResp) == nil {
+				nutMu.Lock()
+				for _, dp := range listResp.DataPoints {
+					if dp.NutritionLog != nil {
+						nl := dp.NutritionLog
+						var d string
+						if nl.Interval.CivilStartTime != nil {
+							d = nl.Interval.CivilStartTime.Date.String()
+						} else if t, err := time.Parse(time.RFC3339, nl.Interval.StartTime); err == nil {
+							d = t.Format("2006-01-02")
+						}
+						if d >= startDateStr {
+							rec := getRec(d)
+							rec.MealsLogged++
+							if nl.Energy != nil {
+								rec.CaloriesIn += parseAnyInt(nl.Energy.Kcal)
 							}
-							if d >= startDateStr {
-								rec := getRec(d)
-								rec.MealsLogged++
-								if nl.Energy != nil {
-									rec.CaloriesIn += parseAnyInt(nl.Energy.Kcal)
-								}
-								if nl.TotalCarbohydrate != nil {
-									rec.CarbsG = math.Round((rec.CarbsG+parseAnyFloat(nl.TotalCarbohydrate.Grams))*10) / 10
-								}
-								if nl.TotalFat != nil {
-									rec.FatG = math.Round((rec.FatG+parseAnyFloat(nl.TotalFat.Grams))*10) / 10
-								}
-								for _, nut := range nl.Nutrients {
-									if strings.Contains(strings.ToUpper(nut.Nutrient), "PROTEIN") {
-										rec.ProteinG = math.Round((rec.ProteinG+parseAnyFloat(nut.Quantity.Grams))*10) / 10
-									}
+							if nl.TotalCarbohydrate != nil {
+								rec.CarbsG = math.Round((rec.CarbsG+parseAnyFloat(nl.TotalCarbohydrate.Grams))*10) / 10
+							}
+							if nl.TotalFat != nil {
+								rec.FatG = math.Round((rec.FatG+parseAnyFloat(nl.TotalFat.Grams))*10) / 10
+							}
+							for _, nut := range nl.Nutrients {
+								if strings.Contains(strings.ToUpper(nut.Nutrient), "PROTEIN") {
+									rec.ProteinG = math.Round((rec.ProteinG+parseAnyFloat(nut.Quantity.Grams))*10) / 10
 								}
 							}
 						}
 					}
-					nutMu.Unlock()
 				}
+				nutMu.Unlock()
 			}
-			resp.Body.Close()
+		} else {
+			checkRespErr(resp)
 		}
+		resp.Body.Close()
 	}()
 
 	subWg.Wait()
@@ -1920,5 +2064,5 @@ func (s *StatelessService) fetchNutrition(client *http.Client, startDateStr stri
 	for _, r := range nutMap {
 		out = append(out, *r)
 	}
-	return out, nil
+	return out, firstErr
 }
