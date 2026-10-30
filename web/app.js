@@ -1864,9 +1864,64 @@ function selectWorkoutRouteById(id) {
     if (w) selectWorkoutRoute(w);
 }
 
+function clearWorkoutMapData() {
+    pendingRouteRender = null;
+    workoutMarkers.forEach(m => m.remove());
+    workoutMarkers = [];
+    if (workoutMap && workoutMapLoaded) {
+        const routeSource = workoutMap.getSource("workout-route");
+        if (routeSource) {
+            routeSource.setData({ type: "FeatureCollection", features: [] });
+        }
+    }
+}
+
+function setWorkoutMapLoading(isLoading) {
+    const mapContainer = document.getElementById("workout-route-map");
+    if (mapContainer) {
+        let overlay = mapContainer.querySelector(".chart-loading-overlay");
+        if (isLoading) {
+            if (!overlay) {
+                overlay = document.createElement("div");
+                overlay.className = "chart-loading-overlay";
+                mapContainer.appendChild(overlay);
+            }
+            overlay.innerHTML = `<i data-lucide="loader" class="spin" style="width: 28px; height: 28px; color: var(--primary-color);"></i><span>Loading GPS route...</span>`;
+            overlay.style.display = "flex";
+        } else if (overlay) {
+            overlay.remove();
+        }
+    }
+
+    const profileCanvas = document.getElementById("chart-workout-profile");
+    if (profileCanvas && profileCanvas.parentElement) {
+        let overlay = profileCanvas.parentElement.querySelector(".chart-loading-overlay");
+        if (isLoading) {
+            if (activeCharts["chart-workout-profile"]) {
+                activeCharts["chart-workout-profile"].destroy();
+                delete activeCharts["chart-workout-profile"];
+            }
+            if (!overlay) {
+                overlay = document.createElement("div");
+                overlay.className = "chart-loading-overlay";
+                profileCanvas.parentElement.appendChild(overlay);
+            }
+            overlay.innerHTML = `<i data-lucide="loader" class="spin" style="width: 28px; height: 28px; color: var(--primary-color);"></i><span>Loading telemetry...</span>`;
+            overlay.style.display = "flex";
+        } else if (overlay) {
+            overlay.remove();
+        }
+    }
+
+    if (isLoading && typeof lucide !== "undefined" && lucide.createIcons) {
+        lucide.createIcons();
+    }
+}
+
 async function selectWorkoutRoute(workout) {
     if (!workout) return;
-    selectedExerciseId = workout.id;
+    const requestWorkoutId = workout.id;
+    selectedExerciseId = requestWorkoutId;
 
     // Highlight active row
     document.querySelectorAll("#workouts-history-table tbody tr").forEach(tr => {
@@ -1881,6 +1936,11 @@ async function selectWorkoutRoute(workout) {
     if (titleEl) titleEl.textContent = `${workout.display_name} — ${dtStr}`;
     if (subEl) {
         subEl.textContent = `${workout.duration_minutes} mins • ${workout.distance_km > 0 ? workout.distance_km.toFixed(2) + ' km • Pace ' + formatPace(workout.duration_minutes, workout.distance_km) + ' • ' : ''}${workout.calories_kcal} kcal • Avg HR ${workout.avg_heart_rate || '--'} BPM`;
+    }
+    if (badgeEl) {
+        badgeEl.textContent = "Loading Route...";
+        badgeEl.style.color = "var(--text-muted)";
+        badgeEl.style.background = "rgba(255, 255, 255, 0.06)";
     }
 
     // Update HR Zone breakdown bar for this workout
@@ -1906,9 +1966,16 @@ async function selectWorkoutRoute(workout) {
     initWorkoutMap();
     if (workoutMap) workoutMap.resize();
 
+    // Immediately clear previous workout's map track/markers and show loading spinner
+    clearWorkoutMapData();
+    setWorkoutMapLoading(true);
+
     try {
         const res = await fetch(`/api/exercise-route?id=${encodeURIComponent(workout.id)}`);
         const routeData = await res.json();
+        if (selectedExerciseId !== requestWorkoutId) return;
+
+        setWorkoutMapLoading(false);
         renderWorkoutRouteOnMap(workout, routeData);
         renderWorkoutProfileChart(workout, routeData);
         if (badgeEl) {
@@ -1923,6 +1990,12 @@ async function selectWorkoutRoute(workout) {
             }
         }
     } catch (e) {
+        if (selectedExerciseId === requestWorkoutId) {
+            setWorkoutMapLoading(false);
+            if (badgeEl) {
+                badgeEl.textContent = "Route Load Failed";
+            }
+        }
         console.warn("Failed to load exercise route:", e);
     }
 }
