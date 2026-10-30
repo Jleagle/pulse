@@ -168,3 +168,26 @@ func TestLoadDotEnv(t *testing.T) {
 		t.Errorf("PULSE_TEST_SECOND = %q, want 42", got)
 	}
 }
+
+func TestMultiUserCacheIsolation(t *testing.T) {
+	svc := NewStatelessService("id", "secret", "http://localhost:8080/oauth/callback")
+	tokA := &oauth2.Token{AccessToken: "acc-a", RefreshToken: "ref-user-a"}
+	tokB := &oauth2.Token{AccessToken: "acc-b", RefreshToken: "ref-user-b"}
+
+	keyA := userCacheKey(tokA)
+	keyB := userCacheKey(tokB)
+	if keyA == keyB {
+		t.Fatalf("expected distinct cache keys for different users, got %q", keyA)
+	}
+
+	svc.statsCache[keyA+":3650:overview:"] = cachedStatsEntry{resp: &StatsResponse{}, cachedAt: time.Now()}
+	svc.statsCache[keyB+":3650:overview:"] = cachedStatsEntry{resp: &StatsResponse{}, cachedAt: time.Now()}
+
+	svc.ClearUserCache(tokA)
+	if _, ok := svc.statsCache[keyA+":3650:overview:"]; ok {
+		t.Errorf("expected user A cache entry to be cleared")
+	}
+	if _, ok := svc.statsCache[keyB+":3650:overview:"]; !ok {
+		t.Errorf("expected user B cache entry to remain intact")
+	}
+}

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -271,8 +273,9 @@ const (
 )
 
 type contextTransport struct {
-	ctx  context.Context
-	base http.RoundTripper
+	ctx     context.Context
+	base    http.RoundTripper
+	userKey string
 }
 
 func (t *contextTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -280,6 +283,30 @@ func (t *contextTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		req = req.WithContext(t.ctx)
 	}
 	return t.base.RoundTrip(req)
+}
+
+func userCacheKey(token *oauth2.Token) string {
+	if token == nil {
+		return "anon"
+	}
+	raw := token.RefreshToken
+	if raw == "" {
+		raw = token.AccessToken
+	}
+	if raw == "" {
+		return "anon"
+	}
+	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:8])
+}
+
+func clientCacheKey(client *http.Client) string {
+	if client != nil {
+		if ct, ok := client.Transport.(*contextTransport); ok && ct.userKey != "" {
+			return ct.userKey
+		}
+	}
+	return "anon"
 }
 
 type cachedStatsEntry struct {
@@ -293,27 +320,29 @@ type cachedRouteEntry struct {
 }
 
 type StatelessService struct {
-	clientID     string
-	clientSecret string
-	redirectURI  string
-	mu           sync.Mutex
-	backoffUntil time.Time
-	tokenMu      sync.Mutex
-	latestTokens map[string]*oauth2.Token
-	cacheMu      sync.RWMutex
-	statsCache   map[string]cachedStatsEntry
-	routeCache   map[string]cachedRouteEntry
+	clientID      string
+	clientSecret  string
+	redirectURI   string
+	mu            sync.Mutex
+	backoffUntil  time.Time
+	backoffByUser map[string]time.Time
+	tokenMu       sync.Mutex
+	latestTokens  map[string]*oauth2.Token
+	cacheMu       sync.RWMutex
+	statsCache    map[string]cachedStatsEntry
+	routeCache    map[string]cachedRouteEntry
 }
 
 func NewStatelessService(clientID, clientSecret, redirectURI string) *StatelessService {
 	SetCookieEncryptionKey(clientSecret)
 	return &StatelessService{
-		clientID:     strings.TrimSpace(clientID),
-		clientSecret: strings.TrimSpace(clientSecret),
-		redirectURI:  strings.TrimSpace(redirectURI),
-		latestTokens: make(map[string]*oauth2.Token),
-		statsCache:   make(map[string]cachedStatsEntry),
-		routeCache:   make(map[string]cachedRouteEntry),
+		clientID:      strings.TrimSpace(clientID),
+		clientSecret:  strings.TrimSpace(clientSecret),
+		redirectURI:   strings.TrimSpace(redirectURI),
+		backoffByUser: make(map[string]time.Time),
+		latestTokens:  make(map[string]*oauth2.Token),
+		statsCache:    make(map[string]cachedStatsEntry),
+		routeCache:    make(map[string]cachedRouteEntry),
 	}
 }
 
@@ -324,6 +353,25 @@ func (s *StatelessService) ClearCache() {
 	s.routeCache = make(map[string]cachedRouteEntry)
 }
 
+func (s *StatelessService) ClearUserCache(token *oauth2.Token) {
+	if token == nil {
+		return
+	}
+	prefix := userCacheKey(token) + ":"
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	for k := range s.statsCache {
+		if strings.HasPrefix(k, prefix) {
+			delete(s.statsCache, k)
+		}
+	}
+	for k := range s.routeCache {
+		if strings.HasPrefix(k, prefix) {
+			delete(s.routeCache, k)
+		}
+	}
+}
+
 func (s *StatelessService) GetCredentials() (string, string, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -331,8 +379,12 @@ func (s *StatelessService) GetCredentials() (string, string, string) {
 }
 
 func (s *StatelessService) getWithRateLimit(client *http.Client, urlStr string) (*http.Response, error) {
+	uKey := clientCacheKey(client)
 	s.mu.Lock()
-	backoff := s.backoffUntil
+	backoff := s.backoffByUser[uKey]
+	if s.backoffUntil.After(backoff) {
+		backoff = s.backoffUntil
+	}
 	s.mu.Unlock()
 
 	if time.Now().Before(backoff) {
@@ -357,7 +409,7 @@ func (s *StatelessService) getWithRateLimit(client *http.Client, urlStr string) 
 				retryAfterSec = val
 			}
 		}
-		s.backoffUntil = time.Now().Add(time.Duration(retryAfterSec) * time.Second)
+		s.backoffByUser[uKey] = time.Now().Add(time.Duration(retryAfterSec) * time.Second)
 		s.mu.Unlock()
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
@@ -433,10 +485,11 @@ func (s *StatelessService) GetOAuthClient(ctx context.Context, token *oauth2.Tok
 
 	httpClient := oauth2.NewClient(ctx, ts)
 	httpClient.Timeout = OutboundReqTimeout
-	if httpClient.Transport != nil && ctx != nil {
+	if httpClient.Transport != nil {
 		httpClient.Transport = &contextTransport{
-			ctx:  ctx,
-			base: httpClient.Transport,
+			ctx:     ctx,
+			base:    httpClient.Transport,
+			userKey: userCacheKey(newToken),
 		}
 	}
 	return httpClient, nil
@@ -470,7 +523,8 @@ func (s *StatelessService) FetchUserProfile(client *http.Client) (*UserProfile, 
 
 // Fetch health metrics concurrently and return stateless response
 func (s *StatelessService) FetchAllStats(client *http.Client, days int, metric, pageToken string) (*StatsResponse, error) {
-	cacheKey := fmt.Sprintf("%d:%s:%s", days, metric, pageToken)
+	uKey := clientCacheKey(client)
+	cacheKey := fmt.Sprintf("%s:%d:%s:%s", uKey, days, metric, pageToken)
 	s.cacheMu.RLock()
 	if entry, ok := s.statsCache[cacheKey]; ok && time.Since(entry.cachedAt) < ServerCacheTTL {
 		s.cacheMu.RUnlock()
@@ -1467,8 +1521,9 @@ func haversineMeters(lat1, lon1, lat2, lon2 float64) float64 {
 
 // FetchExerciseRoute downloads and parses the TCX GPS coordinate stream for an exercise session
 func (s *StatelessService) FetchExerciseRoute(client *http.Client, exerciseID string) (*ExerciseRouteResponse, error) {
+	routeKey := fmt.Sprintf("%s:%s", clientCacheKey(client), exerciseID)
 	s.cacheMu.RLock()
-	if entry, ok := s.routeCache[exerciseID]; ok && time.Since(entry.cachedAt) < ServerCacheTTL {
+	if entry, ok := s.routeCache[routeKey]; ok && time.Since(entry.cachedAt) < ServerCacheTTL {
 		s.cacheMu.RUnlock()
 		return entry.resp, nil
 	}
@@ -1571,7 +1626,7 @@ func (s *StatelessService) FetchExerciseRoute(client *http.Client, exerciseID st
 		Points:     points,
 	}
 	s.cacheMu.Lock()
-	s.routeCache[exerciseID] = cachedRouteEntry{
+	s.routeCache[routeKey] = cachedRouteEntry{
 		resp:     routeResp,
 		cachedAt: time.Now(),
 	}

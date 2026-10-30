@@ -149,6 +149,7 @@ function resetAppData() {
 function saveCache() {
     try {
         const cachePayload = {
+            user: appStatus.user_email || appStatus.user_name || "",
             horizon: currentHorizonDays,
             timestamp: Date.now(),
             data: {
@@ -189,6 +190,11 @@ function loadCache() {
         const raw = localStorage.getItem(CACHE_KEY);
         if (!raw) return false;
         const cached = JSON.parse(raw);
+        const currentUser = appStatus.user_email || appStatus.user_name || "";
+        if (cached.user && currentUser && cached.user !== currentUser) {
+            localStorage.removeItem(CACHE_KEY);
+            return false;
+        }
         if (cached.horizon === currentHorizonDays && cached.data && (Date.now() - cached.timestamp < 6 * 60 * 60 * 1000)) {
             Object.assign(appData, cached.data);
             appData.sleep_loading = false;

@@ -252,13 +252,16 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/?error=cookie_error", http.StatusFound)
 		return
 	}
+	s.service.ClearUserCache(token)
 
 	log.Printf("✅ OAuth Exchange successful and session cookie set!")
 	http.Redirect(w, r, "/?connected=true", http.StatusFound)
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
-	s.service.ClearCache()
+	if token, err := GetSessionCookie(r); err == nil && token != nil {
+		s.service.ClearUserCache(token)
+	}
 	ClearSessionCookie(w, r)
 	if r.Method == http.MethodGet {
 		http.Redirect(w, r, "/", http.StatusFound)
@@ -269,20 +272,22 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleClearCache(w http.ResponseWriter, r *http.Request) {
-	s.service.ClearCache()
+	if token, err := GetSessionCookie(r); err == nil && token != nil {
+		s.service.ClearUserCache(token)
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("refresh") == "true" {
-		s.service.ClearCache()
-	}
-
 	token, err := GetSessionCookie(r)
 	if err != nil || token == nil {
 		http.Error(w, "Unauthorized: Not connected to Google Health", http.StatusUnauthorized)
 		return
+	}
+
+	if r.URL.Query().Get("refresh") == "true" {
+		s.service.ClearUserCache(token)
 	}
 
 	client, err := s.service.GetOAuthClient(r.Context(), token, w, r)
