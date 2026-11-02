@@ -1015,6 +1015,64 @@ func (s *StatelessService) fetchHRV(client *http.Client, startDateStr, pageToken
 	return filtered, listResp.NextPageToken, nil
 }
 
+func extractDataPointDate(dp DataPoint) string {
+	if dp.Steps != nil {
+		return extractDate(dp.Steps.Interval.CivilStartTime, dp.Steps.Interval.StartTime)
+	}
+	if dp.ActiveEnergyBurned != nil {
+		return extractDate(dp.ActiveEnergyBurned.Interval.CivilStartTime, dp.ActiveEnergyBurned.Interval.StartTime)
+	}
+	if dp.BasalEnergyBurned != nil {
+		return extractDate(dp.BasalEnergyBurned.Interval.CivilStartTime, dp.BasalEnergyBurned.Interval.StartTime)
+	}
+	if dp.ActiveMinutes != nil {
+		return extractDate(dp.ActiveMinutes.Interval.CivilStartTime, dp.ActiveMinutes.Interval.StartTime)
+	}
+	if dp.Distance != nil {
+		return extractDate(dp.Distance.Interval.CivilStartTime, dp.Distance.Interval.StartTime)
+	}
+	if dp.Floors != nil {
+		return extractDate(dp.Floors.Interval.CivilStartTime, dp.Floors.Interval.StartTime)
+	}
+	return ""
+}
+
+func (s *StatelessService) fetchActivityPages(client *http.Client, dataType, initialToken, targetStartDate string, maxPages int) ([]DataPoint, string, error) {
+	var allDataPoints []DataPoint
+	curToken := initialToken
+	var lastToken string
+
+	for page := 0; page < maxPages; page++ {
+		listResp, err := s.fetchDataPoints(client, dataType, curToken)
+		if err != nil {
+			return allDataPoints, lastToken, err
+		}
+		allDataPoints = append(allDataPoints, listResp.DataPoints...)
+		lastToken = listResp.NextPageToken
+		if listResp.NextPageToken == "" {
+			break
+		}
+
+		reachedTarget := false
+		if targetStartDate != "" {
+			for i := len(listResp.DataPoints) - 1; i >= 0; i-- {
+				d := extractDataPointDate(listResp.DataPoints[i])
+				if d != "" && d <= targetStartDate {
+					reachedTarget = true
+					break
+				}
+			}
+		}
+		if reachedTarget {
+			break
+		}
+
+		curToken = listResp.NextPageToken
+	}
+
+	return allDataPoints, lastToken, nil
+}
+
 func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDateStr, pageToken string) ([]ActivityRecord, string, error) {
 	stepsMap := make(map[string]int)
 	caloriesMap := make(map[string]int)
@@ -1022,6 +1080,20 @@ func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDat
 	minutesMap := make(map[string]int)
 	distanceMap := make(map[string]float64)
 	floorsMap := make(map[string]int)
+
+	// Target 1 year (365 days) of historical activity by default
+	oneYearAgo := time.Now().UTC().AddDate(0, 0, -365).Format("2006-01-02")
+	targetStartDate := startDateStr
+	if targetStartDate == "" || targetStartDate < oneYearAgo {
+		targetStartDate = oneYearAgo
+	}
+
+	maxPages := 50
+	if pageToken != "" {
+		// When infinite scrolling past the initially loaded horizon, fetch up to 5 additional pages per scroll
+		maxPages = 5
+		targetStartDate = ""
+	}
 
 	var (
 		nextStepsToken string
@@ -1050,13 +1122,13 @@ func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDat
 	subWg.Add(1)
 	go func() {
 		defer subWg.Done()
-		listResp, err := s.fetchDataPoints(client, "steps", pageToken)
+		dps, nextTok, err := s.fetchActivityPages(client, "steps", pageToken, targetStartDate, maxPages)
 		if err != nil {
 			recordErr(err)
 			return
 		}
-		nextStepsToken = listResp.NextPageToken
-		for _, dp := range listResp.DataPoints {
+		nextStepsToken = nextTok
+		for _, dp := range dps {
 			if dp.Steps != nil {
 				if d := extractDate(dp.Steps.Interval.CivilStartTime, dp.Steps.Interval.StartTime); d != "" {
 					cnt, _ := strconv.Atoi(dp.Steps.Count)
@@ -1070,12 +1142,12 @@ func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDat
 	subWg.Add(1)
 	go func() {
 		defer subWg.Done()
-		listResp, err := s.fetchDataPoints(client, "active-energy-burned", pageToken)
+		dps, _, err := s.fetchActivityPages(client, "active-energy-burned", pageToken, targetStartDate, maxPages)
 		if err != nil {
 			recordErr(err)
 			return
 		}
-		for _, dp := range listResp.DataPoints {
+		for _, dp := range dps {
 			if dp.ActiveEnergyBurned != nil {
 				if d := extractDate(dp.ActiveEnergyBurned.Interval.CivilStartTime, dp.ActiveEnergyBurned.Interval.StartTime); d != "" {
 					caloriesMap[d] += int(dp.ActiveEnergyBurned.Kcal)
@@ -1088,12 +1160,12 @@ func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDat
 	subWg.Add(1)
 	go func() {
 		defer subWg.Done()
-		listResp, err := s.fetchDataPoints(client, "basal-energy-burned", pageToken)
+		dps, _, err := s.fetchActivityPages(client, "basal-energy-burned", pageToken, targetStartDate, maxPages)
 		if err != nil {
 			recordErr(err)
 			return
 		}
-		for _, dp := range listResp.DataPoints {
+		for _, dp := range dps {
 			if dp.BasalEnergyBurned != nil {
 				if d := extractDate(dp.BasalEnergyBurned.Interval.CivilStartTime, dp.BasalEnergyBurned.Interval.StartTime); d != "" {
 					basalMap[d] += parseAnyInt(dp.BasalEnergyBurned.Kcal)
@@ -1106,12 +1178,12 @@ func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDat
 	subWg.Add(1)
 	go func() {
 		defer subWg.Done()
-		listResp, err := s.fetchDataPoints(client, "active-minutes", pageToken)
+		dps, _, err := s.fetchActivityPages(client, "active-minutes", pageToken, targetStartDate, maxPages)
 		if err != nil {
 			recordErr(err)
 			return
 		}
-		for _, dp := range listResp.DataPoints {
+		for _, dp := range dps {
 			if dp.ActiveMinutes != nil {
 				if d := extractDate(dp.ActiveMinutes.Interval.CivilStartTime, dp.ActiveMinutes.Interval.StartTime); d != "" {
 					subSum := 0
@@ -1129,12 +1201,12 @@ func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDat
 	subWg.Add(1)
 	go func() {
 		defer subWg.Done()
-		listResp, err := s.fetchDataPoints(client, "distance", pageToken)
+		dps, _, err := s.fetchActivityPages(client, "distance", pageToken, targetStartDate, maxPages)
 		if err != nil {
 			recordErr(err)
 			return
 		}
-		for _, dp := range listResp.DataPoints {
+		for _, dp := range dps {
 			if dp.Distance != nil {
 				if d := extractDate(dp.Distance.Interval.CivilStartTime, dp.Distance.Interval.StartTime); d != "" {
 					mm := parseAnyFloat(dp.Distance.DistanceMillimeters)
@@ -1151,12 +1223,12 @@ func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDat
 	subWg.Add(1)
 	go func() {
 		defer subWg.Done()
-		listResp, err := s.fetchDataPoints(client, "floors", pageToken)
+		dps, _, err := s.fetchActivityPages(client, "floors", pageToken, targetStartDate, maxPages)
 		if err != nil {
 			recordErr(err)
 			return
 		}
-		for _, dp := range listResp.DataPoints {
+		for _, dp := range dps {
 			if dp.Floors != nil {
 				if d := extractDate(dp.Floors.Interval.CivilStartTime, dp.Floors.Interval.StartTime); d != "" {
 					cnt, _ := strconv.Atoi(dp.Floors.Count)
@@ -1194,7 +1266,7 @@ func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDat
 
 	var records []ActivityRecord
 	for d := range allDates {
-		if d >= startDateStr {
+		if pageToken != "" || d >= targetStartDate {
 			distKm := distanceMap[d]
 			if distKm == 0 && stepsMap[d] > 0 {
 				distKm = math.Round(float64(stepsMap[d])*0.000762*100) / 100
@@ -1212,6 +1284,10 @@ func (s *StatelessService) fetchActivity(client *http.Client, startStr, startDat
 			})
 		}
 	}
+
+	sort.Slice(records, func(i, j int) bool {
+		return records[i].Date > records[j].Date
+	})
 
 	if len(records) == 0 {
 		nextStepsToken = ""

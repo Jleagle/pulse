@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -148,6 +149,28 @@ func TestParsingHelpers(t *testing.T) {
 	if d := extractDate(nil, "2026-10-31T08:15:00Z"); d != "2026-10-31" {
 		t.Errorf("extractDate fallback = %q, want 2026-10-31", d)
 	}
+
+	dpSteps := DataPoint{
+		Steps: &Steps{
+			Interval: ObservationTimeInterval{
+				CivilStartTime: &CivilDateTime{Date: Date{Year: 2026, Month: 5, Day: 10}},
+			},
+		},
+	}
+	if d := extractDataPointDate(dpSteps); d != "2026-05-10" {
+		t.Errorf("extractDataPointDate(Steps) = %q, want 2026-05-10", d)
+	}
+
+	dpActiveEnergy := DataPoint{
+		ActiveEnergyBurned: &ActiveEnergyBurned{
+			Interval: ObservationTimeInterval{
+				StartTime: "2026-04-12T12:00:00Z",
+			},
+		},
+	}
+	if d := extractDataPointDate(dpActiveEnergy); d != "2026-04-12" {
+		t.Errorf("extractDataPointDate(ActiveEnergy) = %q, want 2026-04-12", d)
+	}
 }
 
 func TestLoadDotEnv(t *testing.T) {
@@ -190,4 +213,85 @@ func TestMultiUserCacheIsolation(t *testing.T) {
 	if _, ok := svc.statsCache[keyB+":3650:overview:"]; !ok {
 		t.Errorf("expected user B cache entry to remain intact")
 	}
+}
+
+func TestFetchActivityPagesTargetDate(t *testing.T) {
+	requestCount := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		pageToken := r.URL.Query().Get("pageToken")
+
+		var resp ListDataPointsResponse
+		if pageToken == "" {
+			resp.NextPageToken = "token-page-2"
+			resp.DataPoints = []DataPoint{
+				{
+					Steps: &Steps{
+						Count: "5000",
+						Interval: ObservationTimeInterval{
+							CivilStartTime: &CivilDateTime{Date: Date{Year: 2026, Month: 11, Day: 1}},
+						},
+					},
+				},
+			}
+		} else if pageToken == "token-page-2" {
+			resp.NextPageToken = "token-page-3"
+			resp.DataPoints = []DataPoint{
+				{
+					Steps: &Steps{
+						Count: "4200",
+						Interval: ObservationTimeInterval{
+							CivilStartTime: &CivilDateTime{Date: Date{Year: 2026, Month: 10, Day: 15}},
+						},
+					},
+				},
+			}
+		} else {
+			resp.DataPoints = []DataPoint{
+				{
+					Steps: &Steps{
+						Count: "3000",
+						Interval: ObservationTimeInterval{
+							CivilStartTime: &CivilDateTime{Date: Date{Year: 2026, Month: 9, Day: 1}},
+						},
+					},
+				},
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer ts.Close()
+
+	svc := NewStatelessService("id", "secret", "http://localhost:8080/oauth/callback")
+
+	// Custom round tripper redirecting health.googleapis.com to test server
+	testClient := &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			targetURL, _ := url.Parse(ts.URL + req.URL.Path + "?" + req.URL.RawQuery)
+			newReq, _ := http.NewRequest(req.Method, targetURL.String(), req.Body)
+			return http.DefaultTransport.RoundTrip(newReq)
+		}),
+	}
+
+	// Requesting target date 2026-10-20 should stop after page 2 (which reaches 2026-10-15)
+	dps, nextTok, err := svc.fetchActivityPages(testClient, "steps", "", "2026-10-20", 10)
+	if err != nil {
+		t.Fatalf("fetchActivityPages failed: %v", err)
+	}
+	if len(dps) != 2 {
+		t.Fatalf("expected 2 data points, got %d", len(dps))
+	}
+	if requestCount != 2 {
+		t.Errorf("expected 2 page requests, got %d", requestCount)
+	}
+	if nextTok != "token-page-3" {
+		t.Errorf("expected next token 'token-page-3', got %q", nextTok)
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
 }

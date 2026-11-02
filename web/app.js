@@ -7,7 +7,7 @@ let appStatus = {
     user_name: "",
     user_picture: ""
 };
-let currentHorizonDays = 3650; // Query maximum allowed history by default
+let currentHorizonDays = 365; // Query 1 year of history by default
 let chartRangeDays = 14; // Default chart window in days
 
 function setChartRange(days) {
@@ -68,11 +68,12 @@ let workoutMarkers = [];
 let selectedExerciseId = "";
 let selectedSleepId = "";
 
-const CACHE_KEY = "pulse_app_cache_v2";
+const CACHE_KEY = "pulse_app_cache_v3";
 
 function resetAppData() {
     try {
         localStorage.removeItem("pulse_app_cache");
+        localStorage.removeItem("pulse_app_cache_v2");
         localStorage.removeItem(CACHE_KEY);
     } catch (e) {}
     appData = {
@@ -488,6 +489,7 @@ async function logout() {
 
     try {
         localStorage.removeItem("pulse_app_cache");
+        localStorage.removeItem("pulse_app_cache_v2");
         localStorage.removeItem(CACHE_KEY);
     } catch (e) {}
 
@@ -803,9 +805,7 @@ async function loadMetric(metric, pageToken = "") {
             appData.activity_next_page_token = data.activity_next_page_token || "";
             appData.activity_loaded = true;
             populateActivityTable(appData.activity_records);
-            if (!pageToken) {
-                renderActivityCharts({ activity_records: appData.activity_records });
-            }
+            renderActivityCharts({ activity_records: appData.activity_records });
         } else if (metric === "workouts") {
             if (pageToken) {
                 appData.exercise_sessions = appData.exercise_sessions.concat(data.exercise_sessions || []);
