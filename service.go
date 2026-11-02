@@ -521,18 +521,295 @@ func (s *StatelessService) FetchUserProfile(client *http.Client) (*UserProfile, 
 	return &profile, nil
 }
 
+func mergeStatsResponses(existing, fresh *StatsResponse, days int) *StatsResponse {
+	if existing == nil {
+		return fresh
+	}
+	if fresh == nil {
+		return existing
+	}
+
+	merged := &StatsResponse{
+		SleepNextPageToken:    existing.SleepNextPageToken,
+		RHRNextPageToken:      existing.RHRNextPageToken,
+		HRVNextPageToken:      existing.HRVNextPageToken,
+		ActivityNextPageToken: existing.ActivityNextPageToken,
+		ExerciseNextPageToken: existing.ExerciseNextPageToken,
+		MissingScopes:         fresh.MissingScopes,
+		ActivityRecords:       make([]ActivityRecord, 0),
+		HRZoneRecords:         make([]HRZoneRecord, 0),
+		VO2MaxRecords:         make([]VO2MaxRecord, 0),
+		RHRRecords:            make([]RHRRecord, 0),
+		HRVRecords:            make([]HRVRecord, 0),
+		SleepSessions:         make([]SleepSession, 0),
+		ExerciseSessions:      make([]ExerciseSession, 0),
+		SpO2Records:           make([]SpO2Record, 0),
+		RespiratoryRecords:    make([]RespiratoryRateRecord, 0),
+		SleepTempRecords:      make([]SleepTempRecord, 0),
+		BodyRecords:           make([]BodyRecord, 0),
+		NutritionRecords:      make([]NutritionRecord, 0),
+	}
+	if fresh.SleepNextPageToken != "" {
+		merged.SleepNextPageToken = fresh.SleepNextPageToken
+	}
+	if fresh.ActivityNextPageToken != "" {
+		merged.ActivityNextPageToken = fresh.ActivityNextPageToken
+	}
+
+	var cutoffDate string
+	var cutoffRFC string
+	if days > 0 {
+		cutoffDate = time.Now().UTC().AddDate(0, 0, -days).Format("2006-01-02")
+		cutoffRFC = time.Now().UTC().AddDate(0, 0, -days).Format(time.RFC3339)
+	}
+
+	// 1. Activity Records (by Date)
+	actMap := make(map[string]ActivityRecord)
+	for _, r := range existing.ActivityRecords {
+		actMap[r.Date] = r
+	}
+	for _, r := range fresh.ActivityRecords {
+		actMap[r.Date] = r
+	}
+	for _, r := range actMap {
+		if cutoffDate == "" || r.Date >= cutoffDate {
+			merged.ActivityRecords = append(merged.ActivityRecords, r)
+		}
+	}
+	sort.Slice(merged.ActivityRecords, func(i, j int) bool {
+		return merged.ActivityRecords[i].Date > merged.ActivityRecords[j].Date
+	})
+
+	// 2. HR Zone Records (by Date)
+	hzMap := make(map[string]HRZoneRecord)
+	for _, r := range existing.HRZoneRecords {
+		hzMap[r.Date] = r
+	}
+	for _, r := range fresh.HRZoneRecords {
+		hzMap[r.Date] = r
+	}
+	for _, r := range hzMap {
+		if cutoffDate == "" || r.Date >= cutoffDate {
+			merged.HRZoneRecords = append(merged.HRZoneRecords, r)
+		}
+	}
+	sort.Slice(merged.HRZoneRecords, func(i, j int) bool {
+		return merged.HRZoneRecords[i].Date > merged.HRZoneRecords[j].Date
+	})
+
+	// 3. VO2 Max Records (by Date)
+	vo2Map := make(map[string]VO2MaxRecord)
+	for _, r := range existing.VO2MaxRecords {
+		vo2Map[r.Date] = r
+	}
+	for _, r := range fresh.VO2MaxRecords {
+		vo2Map[r.Date] = r
+	}
+	for _, r := range vo2Map {
+		if cutoffDate == "" || r.Date >= cutoffDate {
+			merged.VO2MaxRecords = append(merged.VO2MaxRecords, r)
+		}
+	}
+	sort.Slice(merged.VO2MaxRecords, func(i, j int) bool {
+		return merged.VO2MaxRecords[i].Date > merged.VO2MaxRecords[j].Date
+	})
+
+	// 4. RHR Records (by Date)
+	rhrMap := make(map[string]RHRRecord)
+	for _, r := range existing.RHRRecords {
+		rhrMap[r.Date] = r
+	}
+	for _, r := range fresh.RHRRecords {
+		rhrMap[r.Date] = r
+	}
+	for _, r := range rhrMap {
+		if cutoffDate == "" || r.Date >= cutoffDate {
+			merged.RHRRecords = append(merged.RHRRecords, r)
+		}
+	}
+	sort.Slice(merged.RHRRecords, func(i, j int) bool {
+		return merged.RHRRecords[i].Date > merged.RHRRecords[j].Date
+	})
+
+	// 5. HRV Records (by Date)
+	hrvMap := make(map[string]HRVRecord)
+	for _, r := range existing.HRVRecords {
+		hrvMap[r.Date] = r
+	}
+	for _, r := range fresh.HRVRecords {
+		hrvMap[r.Date] = r
+	}
+	for _, r := range hrvMap {
+		if cutoffDate == "" || r.Date >= cutoffDate {
+			merged.HRVRecords = append(merged.HRVRecords, r)
+		}
+	}
+	sort.Slice(merged.HRVRecords, func(i, j int) bool {
+		return merged.HRVRecords[i].Date > merged.HRVRecords[j].Date
+	})
+
+	// 6. Sleep Sessions (by ID or StartTime)
+	sleepMap := make(map[string]SleepSession)
+	for _, r := range existing.SleepSessions {
+		k := r.ID
+		if k == "" {
+			k = r.StartTime
+		}
+		sleepMap[k] = r
+	}
+	for _, r := range fresh.SleepSessions {
+		k := r.ID
+		if k == "" {
+			k = r.StartTime
+		}
+		sleepMap[k] = r
+	}
+	for _, r := range sleepMap {
+		if cutoffRFC == "" || r.StartTime >= cutoffRFC || r.EndTime >= cutoffRFC {
+			merged.SleepSessions = append(merged.SleepSessions, r)
+		}
+	}
+	sort.Slice(merged.SleepSessions, func(i, j int) bool {
+		return merged.SleepSessions[i].StartTime > merged.SleepSessions[j].StartTime
+	})
+
+	// 7. Exercise Sessions (by ID or StartTime)
+	exMap := make(map[string]ExerciseSession)
+	for _, r := range existing.ExerciseSessions {
+		k := r.ID
+		if k == "" {
+			k = r.StartTime
+		}
+		exMap[k] = r
+	}
+	for _, r := range fresh.ExerciseSessions {
+		k := r.ID
+		if k == "" {
+			k = r.StartTime
+		}
+		exMap[k] = r
+	}
+	for _, r := range exMap {
+		if cutoffRFC == "" || r.StartTime >= cutoffRFC || r.EndTime >= cutoffRFC {
+			merged.ExerciseSessions = append(merged.ExerciseSessions, r)
+		}
+	}
+	sort.Slice(merged.ExerciseSessions, func(i, j int) bool {
+		return merged.ExerciseSessions[i].StartTime > merged.ExerciseSessions[j].StartTime
+	})
+
+	// 8. Vitals & Body Records (by Date)
+	spo2Map := make(map[string]SpO2Record)
+	for _, r := range existing.SpO2Records {
+		spo2Map[r.Date] = r
+	}
+	for _, r := range fresh.SpO2Records {
+		spo2Map[r.Date] = r
+	}
+	for _, r := range spo2Map {
+		if cutoffDate == "" || r.Date >= cutoffDate {
+			merged.SpO2Records = append(merged.SpO2Records, r)
+		}
+	}
+	sort.Slice(merged.SpO2Records, func(i, j int) bool {
+		return merged.SpO2Records[i].Date > merged.SpO2Records[j].Date
+	})
+
+	respMap := make(map[string]RespiratoryRateRecord)
+	for _, r := range existing.RespiratoryRecords {
+		respMap[r.Date] = r
+	}
+	for _, r := range fresh.RespiratoryRecords {
+		respMap[r.Date] = r
+	}
+	for _, r := range respMap {
+		if cutoffDate == "" || r.Date >= cutoffDate {
+			merged.RespiratoryRecords = append(merged.RespiratoryRecords, r)
+		}
+	}
+	sort.Slice(merged.RespiratoryRecords, func(i, j int) bool {
+		return merged.RespiratoryRecords[i].Date > merged.RespiratoryRecords[j].Date
+	})
+
+	tempMap := make(map[string]SleepTempRecord)
+	for _, r := range existing.SleepTempRecords {
+		tempMap[r.Date] = r
+	}
+	for _, r := range fresh.SleepTempRecords {
+		tempMap[r.Date] = r
+	}
+	for _, r := range tempMap {
+		if cutoffDate == "" || r.Date >= cutoffDate {
+			merged.SleepTempRecords = append(merged.SleepTempRecords, r)
+		}
+	}
+	sort.Slice(merged.SleepTempRecords, func(i, j int) bool {
+		return merged.SleepTempRecords[i].Date > merged.SleepTempRecords[j].Date
+	})
+
+	bodyMap := make(map[string]BodyRecord)
+	for _, r := range existing.BodyRecords {
+		bodyMap[r.Date] = r
+	}
+	for _, r := range fresh.BodyRecords {
+		bodyMap[r.Date] = r
+	}
+	for _, r := range bodyMap {
+		if cutoffDate == "" || r.Date >= cutoffDate {
+			merged.BodyRecords = append(merged.BodyRecords, r)
+		}
+	}
+	sort.Slice(merged.BodyRecords, func(i, j int) bool {
+		return merged.BodyRecords[i].Date > merged.BodyRecords[j].Date
+	})
+
+	// 9. Nutrition Records (by Date)
+	nutMap := make(map[string]NutritionRecord)
+	for _, r := range existing.NutritionRecords {
+		nutMap[r.Date] = r
+	}
+	for _, r := range fresh.NutritionRecords {
+		nutMap[r.Date] = r
+	}
+	for _, r := range nutMap {
+		if cutoffDate == "" || r.Date >= cutoffDate {
+			merged.NutritionRecords = append(merged.NutritionRecords, r)
+		}
+	}
+	sort.Slice(merged.NutritionRecords, func(i, j int) bool {
+		return merged.NutritionRecords[i].Date > merged.NutritionRecords[j].Date
+	})
+
+	return merged
+}
+
 // Fetch health metrics concurrently and return stateless response
 func (s *StatelessService) FetchAllStats(client *http.Client, days int, metric, pageToken string) (*StatsResponse, error) {
 	uKey := clientCacheKey(client)
 	cacheKey := fmt.Sprintf("%s:%d:%s:%s", uKey, days, metric, pageToken)
+
 	s.cacheMu.RLock()
-	if entry, ok := s.statsCache[cacheKey]; ok && time.Since(entry.cachedAt) < ServerCacheTTL {
-		s.cacheMu.RUnlock()
-		return entry.resp, nil
-	}
+	existingEntry, hasExisting := s.statsCache[cacheKey]
 	s.cacheMu.RUnlock()
 
-	startTime := time.Now().UTC().AddDate(0, 0, -days)
+	// If recently fetched within 5 minutes, return existing cache directly
+	if hasExisting && time.Since(existingEntry.cachedAt) < 5*time.Minute {
+		return existingEntry.resp, nil
+	}
+
+	queryDays := days
+	// If we already have cached history for this user, do an incremental update (query only the last 3 days)
+	// and merge with existing history, so we don't reload 365 days of data points from Google again!
+	isIncremental := hasExisting && pageToken == "" && existingEntry.resp != nil
+	if isIncremental {
+		if days > 3 {
+			queryDays = 3
+		} else {
+			queryDays = days
+		}
+	}
+
+	startTime := time.Now().UTC().AddDate(0, 0, -queryDays)
 	startTimeRFC := startTime.Format(time.RFC3339)
 	startDateStr := startTime.Format("2006-01-02")
 
@@ -822,6 +1099,10 @@ func (s *StatelessService) FetchAllStats(client *http.Client, days int, metric, 
 	sort.Slice(resp.NutritionRecords, func(i, j int) bool {
 		return resp.NutritionRecords[i].Date > resp.NutritionRecords[j].Date
 	})
+
+	if isIncremental && existingEntry.resp != nil {
+		resp = mergeStatsResponses(existingEntry.resp, resp, days)
+	}
 
 	if len(resp.MissingScopes) == 0 {
 		s.cacheMu.Lock()

@@ -197,7 +197,7 @@ function loadCache() {
             localStorage.removeItem(CACHE_KEY);
             return false;
         }
-        if (cached.horizon === currentHorizonDays && cached.data && (Date.now() - cached.timestamp < 6 * 60 * 60 * 1000)) {
+        if (cached.horizon === currentHorizonDays && cached.data) {
             Object.assign(appData, cached.data);
             appData.sleep_loading = false;
             appData.heart_loading = false;
@@ -211,6 +211,55 @@ function loadCache() {
         console.warn("Failed to load from localStorage:", e);
     }
     return false;
+}
+
+function isCacheFresh() {
+    try {
+        const raw = localStorage.getItem(CACHE_KEY);
+        if (!raw) return false;
+        const cached = JSON.parse(raw);
+        return (Date.now() - cached.timestamp < 5 * 60 * 1000);
+    } catch (e) {
+        return false;
+    }
+}
+
+function mergeByDate(existingList = [], freshList = []) {
+    const map = new Map();
+    (existingList || []).forEach(item => {
+        if (item && item.date) {
+            map.set(item.date, item);
+        }
+    });
+    (freshList || []).forEach(item => {
+        if (item && item.date) {
+            const prev = map.get(item.date);
+            map.set(item.date, prev ? Object.assign({}, prev, item) : item);
+        }
+    });
+    return Array.from(map.values()).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+}
+
+function mergeById(existingList = [], freshList = []) {
+    const map = new Map();
+    (existingList || []).forEach(item => {
+        const key = item ? (item.id || item.start_time) : null;
+        if (key) {
+            map.set(key, item);
+        }
+    });
+    (freshList || []).forEach(item => {
+        const key = item ? (item.id || item.start_time) : null;
+        if (key) {
+            const prev = map.get(key);
+            map.set(key, prev ? Object.assign({}, prev, item) : item);
+        }
+    });
+    return Array.from(map.values()).sort((a, b) => {
+        const tA = a.start_time || "";
+        const tB = b.start_time || "";
+        return tA < tB ? 1 : tA > tB ? -1 : 0;
+    });
 }
 
 // Global chart references for disposal
@@ -533,11 +582,9 @@ async function loadStats(forceRefresh = false) {
     const activeTabPane = document.querySelector(".tab-pane.active");
     const activeTabId = activeTabPane ? activeTabPane.id.replace("tab-", "") : "overview";
     
-    if (!forceRefresh && loadCache()) {
-        const raw = localStorage.getItem(CACHE_KEY);
-        const cacheAgeMin = raw ? Math.round((Date.now() - JSON.parse(raw).timestamp) / 60000) : 0;
-        // Suppress green success toast when loading from browser cache as requested by user
-        
+    const hasCachedData = !forceRefresh && loadCache();
+    if (hasCachedData) {
+        // Immediately render cached data to the screen so app is responsive in 0ms
         if (appData.overview_loaded) {
             populateOverviewCards(appData);
             renderOverviewCharts(appData);
@@ -566,12 +613,16 @@ async function loadStats(forceRefresh = false) {
             renderNutritionCharts(appData);
         }
 
-        if (!["overview", "settings"].includes(activeTabId) && !appData[`${activeTabId}_loaded`]) {
-            await loadMetric(activeTabId);
+        // If cache is fresh (< 5 mins), no need to re-fetch
+        if (isCacheFresh()) {
+            if (!["overview", "settings"].includes(activeTabId) && !appData[`${activeTabId}_loaded`]) {
+                await loadMetric(activeTabId);
+            }
+            return;
         }
-        return;
     }
 
+    // Cache missing or stale: background refresh
     if (activeTabId !== "settings") {
         await loadMetric(activeTabId);
     } else {
@@ -593,6 +644,10 @@ function showLoadingSpinner(metric) {
     };
     const canvases = chartMap[metric] || [];
     canvases.forEach(cid => {
+        // Do not show full loading overlay if the chart is already rendered with data
+        if (activeCharts[cid]) {
+            return;
+        }
         const canvasEl = document.getElementById(cid);
         if (canvasEl && canvasEl.parentElement) {
             let overlay = canvasEl.parentElement.querySelector(".chart-loading-overlay");
@@ -731,102 +786,91 @@ async function loadMetric(metric, pageToken = "") {
 
         if (metric === "overview") {
             appData.overview_loaded = true;
-            if (!appData.sleep_loaded) appData.sleep_sessions = data.sleep_sessions || [];
-            if (!appData.heart_loaded) {
-                appData.rhr_records = data.rhr_records || [];
-                appData.hrv_records = data.hrv_records || [];
-                appData.hr_zone_records = data.hr_zone_records || [];
-                appData.vo2_max_records = data.vo2_max_records || [];
+            if (data.sleep_sessions) appData.sleep_sessions = mergeById(appData.sleep_sessions, data.sleep_sessions);
+            if (data.rhr_records) appData.rhr_records = mergeByDate(appData.rhr_records, data.rhr_records);
+            if (data.hrv_records) appData.hrv_records = mergeByDate(appData.hrv_records, data.hrv_records);
+            if (data.hr_zone_records && data.hr_zone_records.length > 0) {
+                appData.hr_zone_records = mergeByDate(appData.hr_zone_records, data.hr_zone_records);
             }
-            if (!appData.activity_loaded) appData.activity_records = data.activity_records || [];
-            if (!appData.workouts_loaded) appData.exercise_sessions = data.exercise_sessions || [];
-            if (!appData.vitals_loaded) {
-                appData.spo2_records = data.spo2_records || [];
-                appData.respiratory_records = data.respiratory_records || [];
-                appData.sleep_temp_records = data.sleep_temp_records || [];
-                appData.body_records = data.body_records || [];
+            if (data.vo2_max_records && data.vo2_max_records.length > 0) {
+                appData.vo2_max_records = mergeByDate(appData.vo2_max_records, data.vo2_max_records);
             }
-            if (!appData.nutrition_loaded) appData.nutrition_records = data.nutrition_records || [];
+            if (data.activity_records) appData.activity_records = mergeByDate(appData.activity_records, data.activity_records);
+            if (data.exercise_sessions && data.exercise_sessions.length > 0) {
+                appData.exercise_sessions = mergeById(appData.exercise_sessions, data.exercise_sessions);
+            }
+            if (data.spo2_records && data.spo2_records.length > 0) {
+                appData.spo2_records = mergeByDate(appData.spo2_records, data.spo2_records);
+            }
+            if (data.respiratory_records && data.respiratory_records.length > 0) {
+                appData.respiratory_records = mergeByDate(appData.respiratory_records, data.respiratory_records);
+            }
+            if (data.sleep_temp_records && data.sleep_temp_records.length > 0) {
+                appData.sleep_temp_records = mergeByDate(appData.sleep_temp_records, data.sleep_temp_records);
+            }
+            if (data.body_records && data.body_records.length > 0) {
+                appData.body_records = mergeByDate(appData.body_records, data.body_records);
+            }
+            if (data.nutrition_records && data.nutrition_records.length > 0) {
+                appData.nutrition_records = mergeByDate(appData.nutrition_records, data.nutrition_records);
+            }
             populateOverviewCards(appData);
             renderOverviewCharts(appData);
         } else if (metric === "sleep") {
-            if (pageToken) {
-                appData.sleep_sessions = appData.sleep_sessions.concat(data.sleep_sessions || []);
-            } else {
-                appData.sleep_sessions = data.sleep_sessions || [];
+            appData.sleep_sessions = mergeById(appData.sleep_sessions, data.sleep_sessions);
+            if (data.sleep_next_page_token !== undefined) {
+                appData.sleep_next_page_token = data.sleep_next_page_token || "";
             }
-            appData.sleep_next_page_token = data.sleep_next_page_token || "";
             appData.sleep_loaded = true;
             populateSleepTable(appData.sleep_sessions);
             renderSleepCharts({ sleep_sessions: appData.sleep_sessions });
         } else if (metric === "heart" || metric === "rhr" || metric === "hrv") {
             if (metric === "heart" || metric === "rhr") {
-                if (pageToken && metric === "rhr") {
-                    appData.rhr_records = appData.rhr_records.concat(data.rhr_records || []);
-                } else {
-                    appData.rhr_records = data.rhr_records || [];
+                if (data.rhr_records) appData.rhr_records = mergeByDate(appData.rhr_records, data.rhr_records);
+                if (data.rhr_next_page_token !== undefined) {
+                    appData.rhr_next_page_token = data.rhr_next_page_token || "";
                 }
-                appData.rhr_next_page_token = data.rhr_next_page_token || "";
             }
             if (metric === "heart" || metric === "hrv") {
-                if (pageToken && metric === "hrv") {
-                    appData.hrv_records = appData.hrv_records.concat(data.hrv_records || []);
-                } else {
-                    appData.hrv_records = data.hrv_records || [];
+                if (data.hrv_records) appData.hrv_records = mergeByDate(appData.hrv_records, data.hrv_records);
+                if (data.hrv_next_page_token !== undefined) {
+                    appData.hrv_next_page_token = data.hrv_next_page_token || "";
                 }
-                appData.hrv_next_page_token = data.hrv_next_page_token || "";
             }
-            if (!pageToken) {
-                appData.hr_zone_records = data.hr_zone_records || [];
-                appData.vo2_max_records = data.vo2_max_records || [];
+            if (data.hr_zone_records && data.hr_zone_records.length > 0) {
+                appData.hr_zone_records = mergeByDate(appData.hr_zone_records, data.hr_zone_records);
+            }
+            if (data.vo2_max_records && data.vo2_max_records.length > 0) {
+                appData.vo2_max_records = mergeByDate(appData.vo2_max_records, data.vo2_max_records);
             }
             populateHeartTable(appData.rhr_records, appData.hrv_records, appData.vo2_max_records, appData.hr_zone_records);
             appData.heart_loaded = true;
             renderHeartCharts(appData);
         } else if (metric === "activity") {
-            if (pageToken) {
-                const map = new Map();
-                (appData.activity_records || []).forEach(r => map.set(r.date, { ...r }));
-                (data.activity_records || []).forEach(r => {
-                    if (map.has(r.date)) {
-                        const existing = map.get(r.date);
-                        existing.steps = Math.max(existing.steps || 0, r.steps || 0);
-                        existing.calories_burned = Math.max(existing.calories_burned || 0, r.calories_burned || 0);
-                        existing.basal_calories = Math.max(existing.basal_calories || 0, r.basal_calories || 0);
-                        existing.active_minutes = Math.max(existing.active_minutes || 0, r.active_minutes || 0);
-                        existing.distance_km = Math.max(existing.distance_km || 0, r.distance_km || 0);
-                        existing.floors = Math.max(existing.floors || 0, r.floors || 0);
-                    } else {
-                        map.set(r.date, { ...r });
-                    }
-                });
-                appData.activity_records = Array.from(map.values()).sort((a, b) => (a.date < b.date ? 1 : -1));
-            } else {
-                appData.activity_records = data.activity_records || [];
+            appData.activity_records = mergeByDate(appData.activity_records, data.activity_records);
+            if (data.activity_next_page_token !== undefined) {
+                appData.activity_next_page_token = data.activity_next_page_token || "";
             }
-            appData.activity_next_page_token = data.activity_next_page_token || "";
             appData.activity_loaded = true;
             populateActivityTable(appData.activity_records);
             renderActivityCharts({ activity_records: appData.activity_records });
         } else if (metric === "workouts") {
-            if (pageToken) {
-                appData.exercise_sessions = appData.exercise_sessions.concat(data.exercise_sessions || []);
-            } else {
-                appData.exercise_sessions = data.exercise_sessions || [];
+            appData.exercise_sessions = mergeById(appData.exercise_sessions, data.exercise_sessions);
+            if (data.exercise_next_page_token !== undefined) {
+                appData.exercise_next_page_token = data.exercise_next_page_token || "";
             }
-            appData.exercise_next_page_token = data.exercise_next_page_token || "";
             appData.workouts_loaded = true;
             populateWorkoutsTab(appData.exercise_sessions);
         } else if (metric === "vitals") {
-            appData.spo2_records = data.spo2_records || [];
-            appData.respiratory_records = data.respiratory_records || [];
-            appData.sleep_temp_records = data.sleep_temp_records || [];
-            appData.body_records = data.body_records || [];
+            if (data.spo2_records) appData.spo2_records = mergeByDate(appData.spo2_records, data.spo2_records);
+            if (data.respiratory_records) appData.respiratory_records = mergeByDate(appData.respiratory_records, data.respiratory_records);
+            if (data.sleep_temp_records) appData.sleep_temp_records = mergeByDate(appData.sleep_temp_records, data.sleep_temp_records);
+            if (data.body_records) appData.body_records = mergeByDate(appData.body_records, data.body_records);
             appData.vitals_loaded = true;
             populateVitalsTab(appData);
             renderVitalsCharts(appData);
         } else if (metric === "nutrition") {
-            appData.nutrition_records = data.nutrition_records || [];
+            if (data.nutrition_records) appData.nutrition_records = mergeByDate(appData.nutrition_records, data.nutrition_records);
             appData.nutrition_loaded = true;
             populateNutritionTab(appData.nutrition_records);
             renderNutritionCharts(appData);

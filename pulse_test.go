@@ -306,3 +306,89 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
 	return f(r)
 }
+
+func TestMergeStatsResponses(t *testing.T) {
+	now := time.Now().UTC()
+	today := now.Format("2006-01-02")
+	threeDaysAgo := now.AddDate(0, 0, -3).Format("2006-01-02")
+	tenDaysAgo := now.AddDate(0, 0, -10).Format("2006-01-02")
+
+	existing := &StatsResponse{
+		ActivityRecords: []ActivityRecord{
+			{Date: threeDaysAgo, Steps: 5000},
+			{Date: tenDaysAgo, Steps: 8000},
+		},
+		SleepSessions: []SleepSession{
+			{ID: "session-old", StartTime: now.AddDate(0, 0, -5).Format(time.RFC3339), DurationMinutes: 400},
+			{ID: "session-yesterday", StartTime: now.AddDate(0, 0, -1).Format(time.RFC3339), DurationMinutes: 420},
+		},
+		RHRRecords: []RHRRecord{
+			{Date: threeDaysAgo, BeatsPerMinute: 62},
+			{Date: tenDaysAgo, BeatsPerMinute: 65},
+		},
+	}
+
+	fresh := &StatsResponse{
+		ActivityRecords: []ActivityRecord{
+			{Date: today, Steps: 3500},
+			{Date: threeDaysAgo, Steps: 5500}, // updated value
+		},
+		SleepSessions: []SleepSession{
+			{ID: "session-yesterday", StartTime: now.AddDate(0, 0, -1).Format(time.RFC3339), DurationMinutes: 450}, // updated duration
+			{ID: "session-today", StartTime: now.Format(time.RFC3339), DurationMinutes: 480},                       // new session
+		},
+		RHRRecords: []RHRRecord{
+			{Date: today, BeatsPerMinute: 60},
+		},
+	}
+
+	// 1. Merge with no cutoff (days = 0)
+	mergedAll := mergeStatsResponses(existing, fresh, 0)
+	if len(mergedAll.ActivityRecords) != 3 {
+		t.Fatalf("expected 3 activity records without cutoff, got %d", len(mergedAll.ActivityRecords))
+	}
+	if mergedAll.ActivityRecords[0].Date != today || mergedAll.ActivityRecords[0].Steps != 3500 {
+		t.Errorf("expected newest today record first with 3500 steps, got %+v", mergedAll.ActivityRecords[0])
+	}
+	if mergedAll.ActivityRecords[1].Date != threeDaysAgo || mergedAll.ActivityRecords[1].Steps != 5500 {
+		t.Errorf("expected updated 5500 steps for threeDaysAgo, got %+v", mergedAll.ActivityRecords[1])
+	}
+	if mergedAll.ActivityRecords[2].Date != tenDaysAgo {
+		t.Errorf("expected tenDaysAgo record preserved, got %+v", mergedAll.ActivityRecords[2])
+	}
+
+	// Verify sleep sessions merged by ID and sorted descending
+	if len(mergedAll.SleepSessions) != 3 {
+		t.Fatalf("expected 3 sleep sessions, got %d", len(mergedAll.SleepSessions))
+	}
+	if mergedAll.SleepSessions[0].ID != "session-today" {
+		t.Errorf("expected session-today first, got %s", mergedAll.SleepSessions[0].ID)
+	}
+	if mergedAll.SleepSessions[1].ID != "session-yesterday" || mergedAll.SleepSessions[1].DurationMinutes != 450 {
+		t.Errorf("expected updated duration 450 for session-yesterday, got %+v", mergedAll.SleepSessions[1])
+	}
+
+	// 2. Merge with 7-day cutoff (days = 7)
+	merged7d := mergeStatsResponses(existing, fresh, 7)
+	if len(merged7d.ActivityRecords) != 2 {
+		t.Fatalf("expected 2 activity records within 7 days, got %d", len(merged7d.ActivityRecords))
+	}
+	for _, r := range merged7d.ActivityRecords {
+		if r.Date == tenDaysAgo {
+			t.Errorf("tenDaysAgo record should have been trimmed by 7-day cutoff")
+		}
+	}
+	if len(merged7d.RHRRecords) != 2 {
+		t.Fatalf("expected 2 RHR records within 7 days, got %d", len(merged7d.RHRRecords))
+	}
+
+	// Verify nil safety
+	nilMerged := mergeStatsResponses(nil, fresh, 0)
+	if nilMerged != fresh {
+		t.Errorf("expected fresh when existing is nil")
+	}
+	nilMerged2 := mergeStatsResponses(existing, nil, 0)
+	if nilMerged2 != existing {
+		t.Errorf("expected existing when fresh is nil")
+	}
+}
