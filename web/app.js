@@ -68,12 +68,13 @@ let workoutMarkers = [];
 let selectedExerciseId = "";
 let selectedSleepId = "";
 
-const CACHE_KEY = "pulse_app_cache_v3";
+const CACHE_KEY = "pulse_app_cache_v4";
 
 function resetAppData() {
     try {
         localStorage.removeItem("pulse_app_cache");
         localStorage.removeItem("pulse_app_cache_v2");
+        localStorage.removeItem("pulse_app_cache_v3");
         localStorage.removeItem(CACHE_KEY);
     } catch (e) {}
     appData = {
@@ -490,6 +491,7 @@ async function logout() {
     try {
         localStorage.removeItem("pulse_app_cache");
         localStorage.removeItem("pulse_app_cache_v2");
+        localStorage.removeItem("pulse_app_cache_v3");
         localStorage.removeItem(CACHE_KEY);
     } catch (e) {}
 

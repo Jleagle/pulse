@@ -171,6 +171,17 @@ func TestParsingHelpers(t *testing.T) {
 	if d := extractDataPointDate(dpActiveEnergy); d != "2026-04-12" {
 		t.Errorf("extractDataPointDate(ActiveEnergy) = %q, want 2026-04-12", d)
 	}
+
+	dpHRZone := DataPoint{
+		TimeInHeartRateZone: &TimeInHeartRateZoneAPI{
+			Interval: ObservationTimeInterval{
+				StartTime: "2026-08-20T15:30:00Z",
+			},
+		},
+	}
+	if d := extractDataPointDate(dpHRZone); d != "2026-08-20" {
+		t.Errorf("extractDataPointDate(TimeInHeartRateZone) = %q, want 2026-08-20", d)
+	}
 }
 
 func TestLoadDotEnv(t *testing.T) {

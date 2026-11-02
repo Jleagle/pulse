@@ -1034,6 +1034,13 @@ func extractDataPointDate(dp DataPoint) string {
 	if dp.Floors != nil {
 		return extractDate(dp.Floors.Interval.CivilStartTime, dp.Floors.Interval.StartTime)
 	}
+	if dp.TimeInHeartRateZone != nil {
+		startRaw := dp.TimeInHeartRateZone.Interval.StartTime
+		if startRaw == "" {
+			startRaw = dp.TimeInHeartRateZone.StartTime
+		}
+		return extractDate(dp.TimeInHeartRateZone.Interval.CivilStartTime, startRaw)
+	}
 	return ""
 }
 
@@ -1321,17 +1328,23 @@ func (s *StatelessService) fetchHRZonesAndVO2Max(client *http.Client, startDateS
 		errMu.Unlock()
 	}
 
-	// 1. Fetch Time in Heart Rate Zone
+	// 1. Fetch Time in Heart Rate Zone (pages back up to 1 year of history)
 	subWg.Add(1)
 	go func() {
 		defer subWg.Done()
 		zoneMap := make(map[string]*HRZoneRecord)
-		listResp, err := s.fetchDataPoints(client, "time-in-heart-rate-zone", "")
+		oneYearAgo := time.Now().UTC().AddDate(0, 0, -365).Format("2006-01-02")
+		targetStartDate := startDateStr
+		if targetStartDate == "" || targetStartDate < oneYearAgo {
+			targetStartDate = oneYearAgo
+		}
+
+		dps, _, err := s.fetchActivityPages(client, "time-in-heart-rate-zone", "", targetStartDate, 50)
 		if err != nil {
 			recordErr(err)
 			return
 		}
-		for _, dp := range listResp.DataPoints {
+		for _, dp := range dps {
 			if dp.TimeInHeartRateZone == nil {
 				continue
 			}
@@ -1345,7 +1358,7 @@ func (s *StatelessService) fetchHRZonesAndVO2Max(client *http.Client, startDateS
 				endRaw = z.EndTime
 			}
 			d := extractDate(z.Interval.CivilStartTime, startRaw)
-			if d == "" || d < startDateStr {
+			if d == "" || d < targetStartDate {
 				continue
 			}
 			durMin := 1
@@ -1376,6 +1389,9 @@ func (s *StatelessService) fetchHRZonesAndVO2Max(client *http.Client, startDateS
 		for _, r := range zoneMap {
 			zones = append(zones, *r)
 		}
+		sort.Slice(zones, func(i, j int) bool {
+			return zones[i].Date > zones[j].Date
+		})
 	}()
 
 	// 2. Fetch Daily VO2 Max (with fallback to vo2-max sample endpoint)
@@ -1422,6 +1438,9 @@ func (s *StatelessService) fetchHRZonesAndVO2Max(client *http.Client, startDateS
 		for d, v := range vo2Map {
 			vo2s = append(vo2s, VO2MaxRecord{Date: d, VO2Max: v})
 		}
+		sort.Slice(vo2s, func(i, j int) bool {
+			return vo2s[i].Date > vo2s[j].Date
+		})
 	}()
 
 	subWg.Wait()
